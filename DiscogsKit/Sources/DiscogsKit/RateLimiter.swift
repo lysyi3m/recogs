@@ -1,0 +1,137 @@
+import Foundation
+
+/// Central throttle for every Discogs request.
+///
+/// Discogs enforces 60 requests per minute for an authenticated token as a moving 60-second window,
+/// and reports the state on every response via `X-Discogs-Ratelimit*`. The limiter combines both
+/// signals: it tracks its own sends locally so a burst is paced before the first response arrives,
+/// and it trusts the server headers once they exist. A `429` blocks every caller for a backoff
+/// interval rather than only the request that hit it.
+public actor RateLimiter {
+    public struct State: Sendable, Hashable {
+        public var limit: Int
+        public var used: Int?
+        public var remaining: Int?
+        /// Requests this limiter has issued inside the current local window.
+        public var requestsInWindow: Int
+    }
+
+    /// Width of the Discogs moving window.
+    private static let window: TimeInterval = 60
+
+    private let safetyMargin: Int
+    private let baseBackoff: TimeInterval
+    private let maximumBackoff: TimeInterval
+
+    private var limit: Int
+    private var used: Int?
+    private var remaining: Int?
+    private var sendTimestamps: [Date] = []
+    /// Set after a 429; gates every caller until it passes.
+    private var blockedUntil: Date?
+
+    public init(
+        limit: Int = 60,
+        safetyMargin: Int = 5,
+        baseBackoff: TimeInterval = 1,
+        maximumBackoff: TimeInterval = 60
+    ) {
+        self.limit = max(limit, 1)
+        self.safetyMargin = max(safetyMargin, 0)
+        self.baseBackoff = baseBackoff
+        self.maximumBackoff = maximumBackoff
+    }
+
+    public var state: State {
+        State(limit: limit, used: used, remaining: remaining, requestsInWindow: sendTimestamps.count)
+    }
+
+    /// Suspends until a request may be sent, then records the send.
+    public func waitForSlot() async throws {
+        while true {
+            let now = Date()
+
+            if let blockedUntil, blockedUntil > now {
+                try await sleep(until: blockedUntil)
+                continue
+            }
+
+            prune(now: now)
+
+            let budget = max(1, limit - safetyMargin)
+            if sendTimestamps.count >= budget, let oldest = sendTimestamps.first {
+                try await sleep(until: oldest.addingTimeInterval(Self.window))
+                continue
+            }
+
+            // The server says we are inside the safety margin. Wait for our oldest send to age out
+            // of the window; with no local record, pause briefly and re-read.
+            if let remaining, remaining <= safetyMargin {
+                let wake = sendTimestamps.first?.addingTimeInterval(Self.window)
+                    ?? now.addingTimeInterval(1)
+                try await sleep(until: wake)
+                continue
+            }
+
+            sendTimestamps.append(now)
+            // Decrement optimistically so concurrent callers see the cost of in-flight requests
+            // before their responses land.
+            if let current = remaining { remaining = max(current - 1, 0) }
+            return
+        }
+    }
+
+    /// Absorbs the rate-limit headers from a response. Clears any active 429 block.
+    public func update(from response: HTTPURLResponse) {
+        if let value = response.value(forHTTPHeaderField: "X-Discogs-Ratelimit"),
+           let parsed = Int(value.trimmingCharacters(in: .whitespaces)), parsed > 0 {
+            limit = parsed
+        }
+        if let value = response.value(forHTTPHeaderField: "X-Discogs-Ratelimit-Used"),
+           let parsed = Int(value.trimmingCharacters(in: .whitespaces)) {
+            used = parsed
+        }
+        if let value = response.value(forHTTPHeaderField: "X-Discogs-Ratelimit-Remaining"),
+           let parsed = Int(value.trimmingCharacters(in: .whitespaces)) {
+            remaining = parsed
+        }
+        if response.statusCode != 429 {
+            blockedUntil = nil
+        }
+    }
+
+    /// Records a 429 and blocks all callers for the backoff interval. Returns the delay applied.
+    @discardableResult
+    public func noteRateLimited(retryAfter: TimeInterval?, attempt: Int) async throws -> TimeInterval {
+        let delay = backoffDelay(retryAfter: retryAfter, attempt: attempt)
+        let until = Date().addingTimeInterval(delay)
+        if (blockedUntil ?? .distantPast) < until { blockedUntil = until }
+        // A 429 means the window is already full; drop local history so it is rebuilt after the block.
+        sendTimestamps.removeAll()
+        try await sleep(until: until)
+        return delay
+    }
+
+    /// Backoff for a retryable server failure, without the shared block a 429 imposes.
+    public func backOff(attempt: Int) async throws {
+        try await sleep(until: Date().addingTimeInterval(backoffDelay(retryAfter: nil, attempt: attempt)))
+    }
+
+    func backoffDelay(retryAfter: TimeInterval?, attempt: Int) -> TimeInterval {
+        let exponential = min(baseBackoff * pow(2, Double(max(attempt, 0))), maximumBackoff)
+        // Jitter spreads retries when several requests are throttled together.
+        let jittered = exponential * Double.random(in: 0.8...1.2)
+        return min(max(jittered, retryAfter ?? 0), maximumBackoff)
+    }
+
+    private func prune(now: Date) {
+        let cutoff = now.addingTimeInterval(-Self.window)
+        sendTimestamps.removeAll { $0 <= cutoff }
+    }
+
+    private func sleep(until date: Date) async throws {
+        let interval = date.timeIntervalSinceNow
+        guard interval > 0 else { return }
+        try await Task.sleep(for: .seconds(interval))
+    }
+}

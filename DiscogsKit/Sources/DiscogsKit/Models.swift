@@ -1,0 +1,224 @@
+import Foundation
+
+// MARK: - Identity
+
+/// Response of `GET /oauth/identity`: resolves the username the token belongs to.
+public struct Identity: Codable, Sendable, Hashable {
+    public let id: Int
+    public let username: String
+    public let resourceURL: String?
+    public let consumerName: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, username
+        case resourceURL = "resource_url"
+        case consumerName = "consumer_name"
+    }
+}
+
+// MARK: - Pagination
+
+public struct Pagination: Codable, Sendable, Hashable {
+    public let page: Int
+    public let pages: Int
+    public let perPage: Int
+    public let items: Int
+
+    public var hasNextPage: Bool { page < pages }
+
+    enum CodingKeys: String, CodingKey {
+        case page, pages, items
+        case perPage = "per_page"
+    }
+}
+
+// MARK: - Collection
+
+/// One page of `GET /users/{user}/collection/folders/{folder_id}/releases`.
+public struct CollectionPage: Codable, Sendable {
+    public let pagination: Pagination
+    public let releases: [CollectionItem]
+}
+
+/// One owned copy. Discogs models each copy as an *instance* of a release inside a folder, so two
+/// pressings of the same album are two instances sharing a `releaseID`. Removal keys off
+/// `instanceID`.
+public struct CollectionItem: Codable, Sendable, Hashable {
+    public let instanceID: Int
+    public let releaseID: Int
+    public let folderID: Int
+    public let dateAdded: Date?
+    public let rating: Int
+    public let basicInformation: BasicInformation
+
+    enum CodingKeys: String, CodingKey {
+        case instanceID = "instance_id"
+        case releaseID = "id"
+        case folderID = "folder_id"
+        case dateAdded = "date_added"
+        case rating
+        case basicInformation = "basic_information"
+    }
+}
+
+/// The snapshot Discogs embeds in each collection item. Rich enough to render the grid without a
+/// per-record call.
+public struct BasicInformation: Codable, Sendable, Hashable {
+    public let id: Int
+    public let title: String
+    public let year: Int?
+    public let thumb: String?
+    public let coverImage: String?
+    public let artists: [ArtistCredit]
+    public let labels: [LabelCredit]
+    public let formats: [Format]
+    public let genres: [String]
+    public let styles: [String]
+    public let masterID: Int?
+    public let resourceURL: String?
+
+    /// Artist names joined the way Discogs intends, honouring each credit's `join` phrase.
+    public var artistDisplayName: String {
+        var result = ""
+        for (index, artist) in artists.enumerated() {
+            result += artist.displayName
+            guard index < artists.count - 1 else { continue }
+            let join = artist.join?.trimmingCharacters(in: .whitespaces) ?? ""
+            result += join.isEmpty ? ", " : (join == "," ? ", " : " \(join) ")
+        }
+        return result
+    }
+
+    /// e.g. `2 x Vinyl, LP, Album, Reissue`.
+    public var formatDisplayName: String {
+        formats.map(\.displayName).joined(separator: ", ")
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, year, thumb, artists, labels, formats, genres, styles
+        case coverImage = "cover_image"
+        case masterID = "master_id"
+        case resourceURL = "resource_url"
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(Int.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        // Discogs sends 0 for "unknown year"; surface that as nil rather than year zero.
+        let rawYear = try container.decodeIfPresent(Int.self, forKey: .year)
+        year = (rawYear == 0) ? nil : rawYear
+        thumb = try container.decodeIfPresent(String.self, forKey: .thumb)
+        coverImage = try container.decodeIfPresent(String.self, forKey: .coverImage)
+        artists = try container.decodeIfPresent([ArtistCredit].self, forKey: .artists) ?? []
+        labels = try container.decodeIfPresent([LabelCredit].self, forKey: .labels) ?? []
+        formats = try container.decodeIfPresent([Format].self, forKey: .formats) ?? []
+        genres = try container.decodeIfPresent([String].self, forKey: .genres) ?? []
+        styles = try container.decodeIfPresent([String].self, forKey: .styles) ?? []
+        masterID = try container.decodeIfPresent(Int.self, forKey: .masterID)
+        resourceURL = try container.decodeIfPresent(String.self, forKey: .resourceURL)
+    }
+}
+
+public struct ArtistCredit: Codable, Sendable, Hashable {
+    public let id: Int?
+    public let name: String
+    /// Artist name variation as credited on this release; preferred over `name` when present.
+    public let anv: String?
+    /// Phrase linking this credit to the next one, e.g. `&`, `feat.`.
+    public let join: String?
+    public let role: String?
+    public let resourceURL: String?
+
+    public var displayName: String {
+        if let anv, !anv.isEmpty { return anv }
+        return name
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, anv, join, role
+        case resourceURL = "resource_url"
+    }
+}
+
+public struct LabelCredit: Codable, Sendable, Hashable {
+    public let id: Int?
+    public let name: String
+    /// Catalog number.
+    public let catno: String?
+    public let resourceURL: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, catno
+        case resourceURL = "resource_url"
+    }
+}
+
+public struct Format: Codable, Sendable, Hashable {
+    public let name: String
+    /// Disc count, sent as a string.
+    public let qty: String?
+    public let text: String?
+    public let descriptions: [String]
+
+    public var displayName: String {
+        var parts: [String] = []
+        if let qty, let count = Int(qty), count > 1 {
+            parts.append("\(count) x \(name)")
+        } else {
+            parts.append(name)
+        }
+        parts.append(contentsOf: descriptions)
+        if let text, !text.isEmpty { parts.append(text) }
+        return parts.joined(separator: ", ")
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case name, qty, text, descriptions
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        name = try container.decode(String.self, forKey: .name)
+        qty = try container.decodeIfPresent(String.self, forKey: .qty)
+        text = try container.decodeIfPresent(String.self, forKey: .text)
+        descriptions = try container.decodeIfPresent([String].self, forKey: .descriptions) ?? []
+    }
+}
+
+// MARK: - Folders
+
+public struct FolderList: Codable, Sendable {
+    public let folders: [Folder]
+}
+
+public struct Folder: Codable, Sendable, Hashable {
+    public let id: Int
+    public let name: String
+    public let count: Int
+    public let resourceURL: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, count
+        case resourceURL = "resource_url"
+    }
+}
+
+// MARK: - Sorting
+
+/// Sort keys accepted by the collection-items endpoint.
+public enum CollectionSort: String, Sendable {
+    case added
+    case artist
+    case title
+    case year
+    case rating
+    case label
+    case format
+    case catno
+}
+
+public enum SortOrder: String, Sendable {
+    case ascending = "asc"
+    case descending = "desc"
+}

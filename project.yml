@@ -1,0 +1,69 @@
+# Recogs — XcodeGen project spec. Regenerate with `make generate`.
+# One multiplatform SwiftUI app target over the local DiscogsKit package.
+
+name: Recogs
+
+options:
+  bundleIdPrefix: com.mlkshkvch.recogs
+  createIntermediateGroups: true
+  developmentLanguage: en
+  deploymentTarget:
+    macOS: "14.0"
+    iOS: "17.0"
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: YES
+
+packages:
+  DiscogsKit:
+    path: DiscogsKit
+
+targets:
+  Recogs:
+    type: application
+    supportedDestinations: [macOS, iOS]
+    sources:
+      - Recogs
+    dependencies:
+      - package: DiscogsKit
+        product: DiscogsKit
+    info:
+      path: Config/Info.plist
+      properties:
+        CFBundleDisplayName: Recogs
+        CFBundleName: Recogs
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSHumanReadableCopyright: "© 2026 Emil Kashkevich · MIT License"
+        ITSAppUsesNonExemptEncryption: false
+        UILaunchScreen: {}
+    entitlements:
+      path: Config/Recogs.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        # Discogs API and the image CDN.
+        com.apple.security.network.client: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mlkshkvch.recogs
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ENABLE_PREVIEWS: YES
+        ENABLE_HARDENED_RUNTIME: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+
+schemes:
+  Recogs:
+    build:
+      targets:
+        Recogs: all
+    run:
+      config: Debug
+    archive:
+      config: Release
