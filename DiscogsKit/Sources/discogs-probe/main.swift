@@ -39,6 +39,7 @@ func printRateLimit(_ label: String) async {
 }
 
 let cdnCheckOnly = CommandLine.arguments.contains("--cdn-check")
+let releaseOnly = CommandLine.arguments.contains("--release")
 
 do {
     print("User-Agent: \(configuration.userAgent)")
@@ -47,6 +48,32 @@ do {
     print("  username: \(identity.username)")
     print("  user id:  \(identity.id)")
     await printRateLimit("identity")
+
+    if releaseOnly {
+        let page = try await client.collectionPage(user: identity.username, page: 1, perPage: 1)
+        guard let first = page.releases.first else {
+            print("\n  collection is empty")
+            exit(0)
+        }
+        print("\n== GET /releases/\(first.releaseID) ==")
+        let release = try await client.release(id: first.releaseID)
+        print("  \(release.artistDisplayName) — \(release.title)")
+        print("  \(release.formatDisplayName)")
+        print("  released \(release.released ?? "?") · country \(release.country ?? "?")")
+        print("  primary image: \(release.primaryImage?.uri ?? "none")")
+        print("  discogs page: \(release.uri ?? "none")")
+        print("  tracklist (\(release.tracklist.filter(\.isTrack).count) tracks):")
+        for track in release.tracklist {
+            if track.isTrack {
+                let duration = track.duration.isEmpty ? "" : "  (\(track.duration))"
+                print("    \(track.position.isEmpty ? "-" : track.position)  \(track.title)\(duration)")
+            } else {
+                print("    [\(track.type)] \(track.title)")
+            }
+        }
+        await printRateLimit("release")
+        exit(0)
+    }
 
     if cdnCheckOnly {
         print("")

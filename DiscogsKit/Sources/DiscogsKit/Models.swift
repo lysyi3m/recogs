@@ -79,6 +79,10 @@ public struct BasicInformation: Codable, Sendable, Hashable {
 
     /// Artist names joined the way Discogs intends, honouring each credit's `join` phrase.
     public var artistDisplayName: String {
+        Self.joinedName(from: artists)
+    }
+
+    static func joinedName(from artists: [ArtistCredit]) -> String {
         var result = ""
         for (index, artist) in artists.enumerated() {
             result += artist.displayName
@@ -222,4 +226,100 @@ public enum CollectionSort: String, Sendable {
 public enum DiscogsSortOrder: String, Sendable {
     case ascending = "asc"
     case descending = "desc"
+}
+
+// MARK: - Release detail
+
+/// Full release from `GET /releases/{id}`: everything the collection snapshot leaves out.
+public struct Release: Codable, Sendable, Hashable {
+    public let id: Int
+    public let title: String
+    public let year: Int?
+    /// Release date as Discogs formats it, e.g. `1980-10-08` or `1980`. Free-form, so kept as text.
+    public let released: String?
+    public let country: String?
+    public let notes: String?
+    public let artists: [ArtistCredit]
+    public let labels: [LabelCredit]
+    public let formats: [Format]
+    public let genres: [String]
+    public let styles: [String]
+    public let tracklist: [Track]
+    public let images: [ReleaseImage]
+    /// Canonical discogs.com page for this release.
+    public let uri: String?
+
+    public var artistDisplayName: String {
+        BasicInformation.joinedName(from: artists)
+    }
+
+    public var formatDisplayName: String {
+        formats.map(\.displayName).joined(separator: ", ")
+    }
+
+    /// Highest-resolution cover: the primary image if Discogs marks one, else the first.
+    public var primaryImage: ReleaseImage? {
+        images.first { $0.type == "primary" } ?? images.first
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, year, released, country, notes, artists, labels, formats
+        case genres, styles, tracklist, images, uri
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(Int.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        let rawYear = try container.decodeIfPresent(Int.self, forKey: .year)
+        year = (rawYear == 0) ? nil : rawYear
+        released = try container.decodeIfPresent(String.self, forKey: .released)
+        country = try container.decodeIfPresent(String.self, forKey: .country)
+        notes = try container.decodeIfPresent(String.self, forKey: .notes)
+        artists = try container.decodeIfPresent([ArtistCredit].self, forKey: .artists) ?? []
+        labels = try container.decodeIfPresent([LabelCredit].self, forKey: .labels) ?? []
+        formats = try container.decodeIfPresent([Format].self, forKey: .formats) ?? []
+        genres = try container.decodeIfPresent([String].self, forKey: .genres) ?? []
+        styles = try container.decodeIfPresent([String].self, forKey: .styles) ?? []
+        tracklist = try container.decodeIfPresent([Track].self, forKey: .tracklist) ?? []
+        images = try container.decodeIfPresent([ReleaseImage].self, forKey: .images) ?? []
+        uri = try container.decodeIfPresent(String.self, forKey: .uri)
+    }
+}
+
+/// One tracklist entry. Discogs uses the same array for tracks, headings and index entries, which
+/// `type` distinguishes.
+public struct Track: Codable, Sendable, Hashable {
+    /// e.g. `A1`. Empty for headings.
+    public let position: String
+    public let title: String
+    /// e.g. `4:32`. Often empty.
+    public let duration: String
+    /// `track`, `heading`, or `index`.
+    public let type: String
+
+    public var isTrack: Bool { type == "track" }
+
+    enum CodingKeys: String, CodingKey {
+        case position, title, duration
+        // Discogs sends this with a trailing underscore, to avoid clashing with a reserved word.
+        case type = "type_"
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        position = try container.decodeIfPresent(String.self, forKey: .position) ?? ""
+        title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
+        duration = try container.decodeIfPresent(String.self, forKey: .duration) ?? ""
+        type = try container.decodeIfPresent(String.self, forKey: .type) ?? "track"
+    }
+}
+
+public struct ReleaseImage: Codable, Sendable, Hashable {
+    /// `primary` or `secondary`.
+    public let type: String
+    public let uri: String
+    public let uri150: String?
+    public let width: Int?
+    public let height: Int?
 }

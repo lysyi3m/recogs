@@ -6,7 +6,7 @@ SCHEME  := Recogs
 PACKAGE := DiscogsKit
 
 .DEFAULT_GOAL := help
-.PHONY: help generate test test-package test-app build build-ios probe probe-cdn clean
+.PHONY: help generate test test-package test-app build build-ios probe probe-cdn probe-release clean
 
 help: ## List available targets
 	@grep -E '^[a-z][a-zA-Z-]*:.*##' $(MAKEFILE_LIST) | sed -E 's/:.*## / — /' | sort
@@ -37,6 +37,9 @@ probe: ## Smoke-test DiscogsKit against the live API
 
 probe-cdn: ## Measure whether CDN image loads consume the API rate limit
 	swift run --package-path $(PACKAGE) discogs-probe --cdn-check
+
+probe-release: ## Fetch one real release with its tracklist
+	swift run --package-path $(PACKAGE) discogs-probe --release
 
 clean: ## Remove build artifacts
 	rm -rf build $(PACKAGE)/.build

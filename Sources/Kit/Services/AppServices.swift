@@ -40,7 +40,7 @@ public final class AppServices {
     }
 
     nonisolated public static func makeModelContainer(inMemory: Bool = false) throws -> ModelContainer {
-        let schema = Schema([CachedCollectionItem.self, CachedFolder.self])
+        let schema = Schema([CachedCollectionItem.self, CachedReleaseDetail.self, CachedFolder.self])
         let configuration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: inMemory)
         return try ModelContainer(for: schema, configurations: [configuration])
     }

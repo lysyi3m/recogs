@@ -45,6 +45,13 @@ public struct DiscogsClient: Sendable {
         return list.folders
     }
 
+    // MARK: - Releases
+
+    /// `GET /releases/{id}` — the full release, including tracklist and full-size images.
+    public func release(id: Int) async throws -> Release {
+        try await get(path: "/releases/\(id)")
+    }
+
     // MARK: - Collection
 
     /// One page of `GET /users/{user}/collection/folders/{folder_id}/releases`.

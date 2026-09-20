@@ -30,7 +30,7 @@ public struct ContentView: View {
                 .toolbar { toolbarContent }
                 .safeAreaInset(edge: .bottom) { densityBar }
                 .navigationDestination(item: $selection) { item in
-                    RecordDetailPlaceholder(item: item)
+                    RecordDetailView(item: item)
                 }
         }
         .task {
@@ -133,30 +133,6 @@ public struct ContentView: View {
             .padding(.vertical, 8)
             .background(.bar)
         }
-    }
-}
-
-/// Stands in until step 4 builds the real record detail.
-private struct RecordDetailPlaceholder: View {
-    let item: CachedCollectionItem
-
-    var body: some View {
-        VStack(spacing: 12) {
-            CoverImageView(
-                releaseID: item.releaseID,
-                remoteURL: item.coverURL ?? item.thumbURL,
-                kind: .cover,
-                edge: 320
-            )
-            .frame(width: 320, height: 320)
-            .clipShape(.rect(cornerRadius: 8))
-
-            Text(item.title).font(.title2.weight(.semibold))
-            Text(item.artistName).foregroundStyle(.secondary)
-            Text(item.formatSummary).font(.caption).foregroundStyle(.secondary)
-        }
-        .padding()
-        .navigationTitle(item.title)
     }
 }
 

@@ -65,6 +65,34 @@ actor CollectionStore {
         try modelContext.save()
     }
 
+    // MARK: - Release detail
+
+    func releaseDetail(releaseID: Int) throws -> ReleaseDetailSnapshot? {
+        try cachedReleaseDetail(releaseID: releaseID)?.snapshot
+    }
+
+    @discardableResult
+    func upsertReleaseDetail(_ release: Release) throws -> ReleaseDetailSnapshot {
+        let cached: CachedReleaseDetail
+        if let existing = try cachedReleaseDetail(releaseID: release.id) {
+            existing.update(from: release)
+            cached = existing
+        } else {
+            cached = CachedReleaseDetail(from: release)
+            modelContext.insert(cached)
+        }
+        try modelContext.save()
+        return cached.snapshot
+    }
+
+    private func cachedReleaseDetail(releaseID: Int) throws -> CachedReleaseDetail? {
+        var descriptor = FetchDescriptor<CachedReleaseDetail>(
+            predicate: #Predicate { $0.releaseID == releaseID }
+        )
+        descriptor.fetchLimit = 1
+        return try modelContext.fetch(descriptor).first
+    }
+
     // MARK: - Folders
 
     func folders() throws -> [FolderSnapshot] {
@@ -93,6 +121,7 @@ actor CollectionStore {
 
     func removeAll() throws {
         try modelContext.delete(model: CachedCollectionItem.self)
+        try modelContext.delete(model: CachedReleaseDetail.self)
         try modelContext.delete(model: CachedFolder.self)
         try modelContext.save()
     }
