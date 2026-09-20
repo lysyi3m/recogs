@@ -2,97 +2,161 @@ import DiscogsKit
 import SwiftData
 import SwiftUI
 
-/// Scaffolding for step 2 of the build order: it exercises the cache and the sync engine so both
-/// can be verified against the real API. The collection grid replaces it in step 3, and the token
-/// field gives way to the first-run screen in step 7.
 public struct ContentView: View {
     @Environment(AppServices.self) private var services
-    @Query private var items: [CachedCollectionItem]
+    @Query private var allItems: [CachedCollectionItem]
 
-    @State private var token = ""
-    @State private var status = ""
-    @State private var progress: CollectionSyncer.Progress?
-    @State private var isBusy = false
-    @State private var errorMessage: String?
+    @AppStorage("collectionSort") private var sortRaw = CollectionSortOption.default.rawValue
+    @AppStorage("collectionSortDirection") private var directionRaw = CollectionSortOption.defaultOrder.rawValue
+    @AppStorage("collectionItemWidth") private var itemWidth = 120.0
+
+    @State private var syncController: SyncController?
+    @State private var selection: CachedCollectionItem?
 
     public init() {}
 
+    private var sort: CollectionSortOption {
+        CollectionSortOption(rawValue: sortRaw) ?? .default
+    }
+
+    private var direction: SortDirection {
+        SortDirection(rawValue: directionRaw) ?? CollectionSortOption.defaultOrder
+    }
+
     public var body: some View {
-        Form {
-            Section("Cache") {
-                LabeledContent("Cached copies", value: "\(items.count)")
-                if let newest = items.compactMap(\.dateAdded).max() {
-                    LabeledContent("Newest addition", value: newest.formatted(date: .abbreviated, time: .omitted))
+        NavigationStack {
+            content
+                .navigationTitle("Collection")
+                .toolbar { toolbarContent }
+                .safeAreaInset(edge: .bottom) { densityBar }
+                .navigationDestination(item: $selection) { item in
+                    RecordDetailPlaceholder(item: item)
                 }
-            }
+        }
+        .task {
+            if syncController == nil { syncController = SyncController(services: services) }
+        }
+    }
 
-            if services.hasToken {
-                Section("Sync") {
-                    Button("Sync Now", action: sync)
-                        .disabled(isBusy)
-                    if let progress {
-                        ProgressView(
-                            value: Double(progress.itemsFetched),
-                            total: Double(max(progress.totalItems, 1))
-                        ) {
-                            Text("Page \(progress.page) of \(progress.totalPages)")
-                        }
+    @ViewBuilder
+    private var content: some View {
+        if !services.hasToken {
+            SetupView()
+        } else if allItems.isEmpty {
+            ContentUnavailableView {
+                Label("No Records Yet", systemImage: "square.stack")
+            } description: {
+                Text("Sync to pull your Discogs collection onto this device.")
+            } actions: {
+                Button("Sync Now") { Task { await syncController?.sync() } }
+                    .disabled(syncController?.isSyncing ?? true)
+            }
+        } else {
+            CollectionGridView(
+                sort: sort,
+                direction: direction,
+                itemWidth: itemWidth
+            ) { selection = $0 }
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        if services.hasToken {
+            sortMenu
+            refreshButton
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var sortMenu: some ToolbarContent {
+        ToolbarItem {
+            Menu {
+                Picker("Sort By", selection: $sortRaw) {
+                    ForEach(CollectionSortOption.allCases) { option in
+                        Text(option.label).tag(option.rawValue)
                     }
-                    if !status.isEmpty {
-                        Text(status).font(.footnote).foregroundStyle(.secondary)
+                }
+                Divider()
+                Picker("Order", selection: $directionRaw) {
+                    ForEach(SortDirection.allCases) { option in
+                        Text(option.label).tag(option.rawValue)
                     }
                 }
-            } else {
-                Section("Personal Access Token") {
-                    SecureField("Paste your Discogs token", text: $token)
-                    Button("Validate and Save", action: signIn)
-                        .disabled(token.isEmpty || isBusy)
+            } label: {
+                Label("Sort", systemImage: "arrow.up.arrow.down")
+            }
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var refreshButton: some ToolbarContent {
+        ToolbarItem {
+            Button {
+                Task { await syncController?.sync() }
+            } label: {
+                Label("Refresh", systemImage: "arrow.clockwise")
+            }
+            .disabled(syncController?.isSyncing ?? true)
+        }
+    }
+
+    @ViewBuilder
+    private var densityBar: some View {
+        if services.hasToken, !allItems.isEmpty {
+            VStack(spacing: 4) {
+                if let progress = syncController?.progress {
+                    ProgressView(
+                        value: Double(progress.itemsFetched),
+                        total: Double(max(progress.totalItems, 1))
+                    )
+                    .progressViewStyle(.linear)
+                } else if let errorMessage = syncController?.errorMessage {
+                    Text(errorMessage)
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .lineLimit(2)
                 }
-            }
 
-            if let errorMessage {
-                Section {
-                    Text(errorMessage).foregroundStyle(.red)
+                HStack(spacing: 10) {
+                    Image(systemName: "square.grid.4x3.fill").imageScale(.small)
+                    // Inverted: dragging right means denser, so smaller covers.
+                    Slider(value: $itemWidth, in: 60...260)
+                    Image(systemName: "square.fill").imageScale(.small)
+                    Text("\(allItems.count)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
                 }
+                .foregroundStyle(.secondary)
             }
-        }
-        .formStyle(.grouped)
-        .navigationTitle("Recogs")
-    }
-
-    private func signIn() {
-        run {
-            let identity = try await services.signIn(token: token)
-            token = ""
-            status = "Signed in as \(identity.username)."
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(.bar)
         }
     }
+}
 
-    private func sync() {
-        guard let syncer = services.makeSyncer() else { return }
-        run {
-            let summary = try await syncer.sync { update in
-                Task { @MainActor in progress = update }
-            }
-            progress = nil
-            status = """
-            \(summary.itemsSynced) copies synced, \(summary.itemsRemoved) removed, \
-            \(summary.thumbsFetched) thumbs cached.
-            """
-        }
-    }
+/// Stands in until step 4 builds the real record detail.
+private struct RecordDetailPlaceholder: View {
+    let item: CachedCollectionItem
 
-    private func run(_ work: @escaping () async throws -> Void) {
-        isBusy = true
-        errorMessage = nil
-        Task {
-            do {
-                try await work()
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-            isBusy = false
+    var body: some View {
+        VStack(spacing: 12) {
+            CoverImageView(
+                releaseID: item.releaseID,
+                remoteURL: item.coverURL ?? item.thumbURL,
+                kind: .cover,
+                edge: 320
+            )
+            .frame(width: 320, height: 320)
+            .clipShape(.rect(cornerRadius: 8))
+
+            Text(item.title).font(.title2.weight(.semibold))
+            Text(item.artistName).foregroundStyle(.secondary)
+            Text(item.formatSummary).font(.caption).foregroundStyle(.secondary)
         }
+        .padding()
+        .navigationTitle(item.title)
     }
 }
 
