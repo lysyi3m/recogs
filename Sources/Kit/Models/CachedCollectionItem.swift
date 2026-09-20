@@ -1,0 +1,84 @@
+import DiscogsKit
+import Foundation
+import SwiftData
+
+/// One owned copy, mirrored from Discogs.
+///
+/// This is a cache, never the source of truth: a refresh upserts by `instanceID` and drops rows
+/// Discogs no longer reports. The `basic_information` snapshot is flattened into stored properties
+/// so the grid can sort and render without a per-record call.
+@Model
+final class CachedCollectionItem {
+    /// Identifies the copy. Two pressings of the same album share a `releaseID` but not this.
+    @Attribute(.unique) var instanceID: Int
+    var releaseID: Int
+    var folderID: Int
+    var dateAdded: Date?
+    var rating: Int
+
+    var title: String
+    /// Pre-joined artist credit, as Discogs would render it.
+    var artistName: String
+    var year: Int?
+    var thumbURL: String?
+    var coverURL: String?
+    var formatSummary: String
+    var labelName: String?
+    var catalogNumber: String?
+    var genres: [String]
+    var styles: [String]
+
+    /// Case-folded sort keys, stored so SwiftData can sort in the store rather than in memory.
+    var sortArtist: String
+    var sortTitle: String
+
+    init(from item: CollectionItem) {
+        instanceID = item.instanceID
+        releaseID = item.releaseID
+        folderID = item.folderID
+        dateAdded = item.dateAdded
+        rating = item.rating
+        title = item.basicInformation.title
+        artistName = item.basicInformation.artistDisplayName
+        year = item.basicInformation.year
+        thumbURL = item.basicInformation.thumb
+        coverURL = item.basicInformation.coverImage
+        formatSummary = item.basicInformation.formatDisplayName
+        labelName = item.basicInformation.labels.first?.name
+        catalogNumber = item.basicInformation.labels.first?.catno
+        genres = item.basicInformation.genres
+        styles = item.basicInformation.styles
+        sortArtist = Self.sortKey(item.basicInformation.artistDisplayName)
+        sortTitle = Self.sortKey(item.basicInformation.title)
+    }
+
+    /// Applies a fresh snapshot in place. Discogs wins on every field.
+    func update(from item: CollectionItem) {
+        releaseID = item.releaseID
+        folderID = item.folderID
+        dateAdded = item.dateAdded
+        rating = item.rating
+        title = item.basicInformation.title
+        artistName = item.basicInformation.artistDisplayName
+        year = item.basicInformation.year
+        thumbURL = item.basicInformation.thumb
+        coverURL = item.basicInformation.coverImage
+        formatSummary = item.basicInformation.formatDisplayName
+        labelName = item.basicInformation.labels.first?.name
+        catalogNumber = item.basicInformation.labels.first?.catno
+        genres = item.basicInformation.genres
+        styles = item.basicInformation.styles
+        sortArtist = Self.sortKey(item.basicInformation.artistDisplayName)
+        sortTitle = Self.sortKey(item.basicInformation.title)
+    }
+
+    /// Lowercases and drops a leading article so "The Beatles" sorts under B.
+    static func sortKey(_ value: String) -> String {
+        let folded = value.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        for article in ["the ", "a ", "an "] where folded.hasPrefix(article) {
+            return String(folded.dropFirst(article.count))
+        }
+        return folded
+    }
+}

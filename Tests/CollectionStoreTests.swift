@@ -1,0 +1,150 @@
+import DiscogsKit
+import Foundation
+import SwiftData
+import Testing
+@testable import RecogsKit
+
+@Suite("CollectionStore")
+struct CollectionStoreTests {
+    private func makeStore() throws -> CollectionStore {
+        CollectionStore(modelContainer: try AppServices.makeModelContainer(inMemory: true))
+    }
+
+    private func makeItem(
+        instanceID: Int,
+        releaseID: Int = 100,
+        title: String = "Remain In Light",
+        artist: String = "Talking Heads",
+        year: Int? = 1980,
+        dateAdded: String = "2019-05-06T18:32:50-07:00"
+    ) throws -> CollectionItem {
+        let yearJSON = year.map(String.init) ?? "0"
+        let json = """
+        {
+          "id": \(releaseID),
+          "instance_id": \(instanceID),
+          "folder_id": 1,
+          "rating": 0,
+          "date_added": "\(dateAdded)",
+          "basic_information": {
+            "id": \(releaseID),
+            "title": "\(title)",
+            "year": \(yearJSON),
+            "thumb": "https://i.discogs.com/\(releaseID)-thumb.jpeg",
+            "cover_image": "https://i.discogs.com/\(releaseID)-cover.jpeg",
+            "artists": [{ "name": "\(artist)", "join": "" }],
+            "labels": [{ "name": "Sire", "catno": "SRK 6095" }],
+            "formats": [{ "name": "Vinyl", "qty": "1", "descriptions": ["LP"] }],
+            "genres": ["Rock"],
+            "styles": ["New Wave"]
+          }
+        }
+        """
+        return try DiscogsClient.makeDecoder().decode(CollectionItem.self, from: Data(json.utf8))
+    }
+
+    @Test("Upsert inserts new copies and flattens basic_information")
+    func upsertInserts() async throws {
+        let store = try makeStore()
+        try await store.upsert([makeItem(instanceID: 1), makeItem(instanceID: 2, releaseID: 200)])
+
+        #expect(try await store.itemCount() == 2)
+        let cached = try #require(try await store.item(instanceID: 1))
+        #expect(cached.title == "Remain In Light")
+        #expect(cached.artistName == "Talking Heads")
+        #expect(cached.catalogNumber == "SRK 6095")
+        #expect(cached.formatSummary == "Vinyl, LP")
+        #expect(cached.thumbURL == "https://i.discogs.com/100-thumb.jpeg")
+    }
+
+    @Test("Upsert updates an existing copy in place rather than duplicating it")
+    func upsertUpdates() async throws {
+        let store = try makeStore()
+        try await store.upsert([makeItem(instanceID: 1, title: "Old Title")])
+        try await store.upsert([makeItem(instanceID: 1, title: "New Title")])
+
+        #expect(try await store.itemCount() == 1, "the same instance must not be duplicated")
+        let cached = try #require(try await store.item(instanceID: 1))
+        #expect(cached.title == "New Title", "Discogs wins on conflict")
+    }
+
+    @Test("Two pressings of one release are two independent copies")
+    func distinctInstancesOfSameRelease() async throws {
+        let store = try makeStore()
+        try await store.upsert([
+            makeItem(instanceID: 1, releaseID: 500),
+            makeItem(instanceID: 2, releaseID: 500),
+        ])
+        #expect(try await store.itemCount() == 2)
+    }
+
+    @Test("Pruning drops copies Discogs no longer reports")
+    func prune() async throws {
+        let store = try makeStore()
+        try await store.upsert([
+            makeItem(instanceID: 1),
+            makeItem(instanceID: 2, releaseID: 200),
+            makeItem(instanceID: 3, releaseID: 300),
+        ])
+
+        let removed = try await store.pruneItems(keeping: [1, 3])
+        #expect(removed == 1)
+        #expect(try await store.itemCount() == 2)
+        #expect(try await store.item(instanceID: 2) == nil)
+    }
+
+    @Test("Default sort is date added, descending")
+    func defaultSort() async throws {
+        let store = try makeStore()
+        try await store.upsert([
+            makeItem(instanceID: 1, releaseID: 1, title: "Oldest", dateAdded: "2019-01-01T00:00:00-00:00"),
+            makeItem(instanceID: 2, releaseID: 2, title: "Newest", dateAdded: "2024-01-01T00:00:00-00:00"),
+            makeItem(instanceID: 3, releaseID: 3, title: "Middle", dateAdded: "2021-01-01T00:00:00-00:00"),
+        ])
+
+        let titles = try await store.items().map(\.title)
+        #expect(titles == ["Newest", "Middle", "Oldest"])
+    }
+
+    @Test("Artist, title and year sort in both directions")
+    func sortDimensions() async throws {
+        let store = try makeStore()
+        try await store.upsert([
+            makeItem(instanceID: 1, releaseID: 1, title: "Bravo", artist: "The Zombies", year: 1968),
+            makeItem(instanceID: 2, releaseID: 2, title: "Alpha", artist: "Aphex Twin", year: 1992),
+            makeItem(instanceID: 3, releaseID: 3, title: "Charlie", artist: "Miles Davis", year: 1959),
+        ])
+
+        let artistsAscending = try await store.items(sortedBy: .artist, direction: .ascending).map(\.artistName)
+        #expect(artistsAscending == ["Aphex Twin", "Miles Davis", "The Zombies"], "leading article is ignored")
+
+        let artistsDescending = try await store.items(sortedBy: .artist, direction: .descending).map(\.artistName)
+        #expect(artistsDescending == ["The Zombies", "Miles Davis", "Aphex Twin"])
+
+        let titlesAscending = try await store.items(sortedBy: .title, direction: .ascending).map(\.title)
+        #expect(titlesAscending == ["Alpha", "Bravo", "Charlie"])
+
+        let yearsDescending = try await store.items(sortedBy: .year, direction: .descending).map(\.year)
+        #expect(yearsDescending == [1992, 1968, 1959])
+    }
+
+    @Test("Folders are replaced wholesale, dropping ones that disappeared")
+    func replaceFolders() async throws {
+        let store = try makeStore()
+        let decoder = DiscogsClient.makeDecoder()
+        let first = try decoder.decode([Folder].self, from: Data("""
+        [{ "id": 0, "name": "All", "count": 70 }, { "id": 1, "name": "Uncategorized", "count": 70 }]
+        """.utf8))
+        try await store.replaceFolders(first)
+        #expect(try await store.folders().count == 2)
+
+        let second = try decoder.decode([Folder].self, from: Data("""
+        [{ "id": 0, "name": "All", "count": 71 }]
+        """.utf8))
+        try await store.replaceFolders(second)
+
+        let folders = try await store.folders()
+        #expect(folders.map(\.id) == [0])
+        #expect(folders.first?.count == 71)
+    }
+}

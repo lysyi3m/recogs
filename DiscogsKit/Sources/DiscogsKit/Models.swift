@@ -218,7 +218,8 @@ public enum CollectionSort: String, Sendable {
     case catno
 }
 
-public enum SortOrder: String, Sendable {
+/// Named to avoid colliding with Foundation's `SortOrder`, which `SortDescriptor` uses.
+public enum DiscogsSortOrder: String, Sendable {
     case ascending = "asc"
     case descending = "desc"
 }

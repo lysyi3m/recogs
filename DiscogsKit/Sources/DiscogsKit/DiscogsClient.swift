@@ -56,7 +56,7 @@ public struct DiscogsClient: Sendable {
         page: Int = 1,
         perPage: Int? = nil,
         sort: CollectionSort? = nil,
-        order: SortOrder? = nil
+        order: DiscogsSortOrder? = nil
     ) async throws -> CollectionPage {
         var query = [
             URLQueryItem(name: "page", value: String(max(page, 1))),
@@ -78,7 +78,7 @@ public struct DiscogsClient: Sendable {
         folderID: Int = DiscogsFolder.all,
         perPage: Int? = nil,
         sort: CollectionSort? = nil,
-        order: SortOrder? = nil
+        order: DiscogsSortOrder? = nil
     ) -> AsyncThrowingStream<CollectionPage, any Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
@@ -113,7 +113,7 @@ public struct DiscogsClient: Sendable {
         folderID: Int = DiscogsFolder.all,
         perPage: Int? = nil,
         sort: CollectionSort? = nil,
-        order: SortOrder? = nil
+        order: DiscogsSortOrder? = nil
     ) async throws -> [CollectionItem] {
         var items: [CollectionItem] = []
         for try await page in collectionPages(
@@ -217,7 +217,9 @@ public struct DiscogsClient: Sendable {
         component.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? component
     }
 
-    static func makeDecoder() -> JSONDecoder {
+    /// Decoder configured for Discogs payloads. Public so fixtures and previews can build models
+    /// from recorded JSON without duplicating the date strategy.
+    public static func makeDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         // Discogs sends ISO-8601 with a UTC offset, sometimes with fractional seconds.
         // ISO8601FormatStyle accepts both and, unlike ISO8601DateFormatter, is Sendable.

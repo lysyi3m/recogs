@@ -38,6 +38,8 @@ func printRateLimit(_ label: String) async {
     print("  [rate limit after \(label)] limit=\(state.limit) used=\(used) remaining=\(remaining)")
 }
 
+let cdnCheckOnly = CommandLine.arguments.contains("--cdn-check")
+
 do {
     print("User-Agent: \(configuration.userAgent)")
     print("\n== GET /oauth/identity ==")
@@ -45,6 +47,12 @@ do {
     print("  username: \(identity.username)")
     print("  user id:  \(identity.id)")
     await printRateLimit("identity")
+
+    if cdnCheckOnly {
+        print("")
+        try await CDNCheck.run(client: client, identity: identity)
+        exit(0)
+    }
 
     print("\n== GET /users/\(identity.username)/collection/folders ==")
     let folders = try await client.folders(user: identity.username)

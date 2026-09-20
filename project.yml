@@ -25,14 +25,30 @@ packages:
     path: DiscogsKit
 
 targets:
+  # Everything but the @main entry point: SwiftData cache, services, and the SwiftUI feature layer.
+  # Keeping the views here too means only AppServices and the root view need to be public, and the
+  # tests can run unhosted — no app launch, no sandbox, no signing.
+  RecogsKit:
+    type: framework
+    supportedDestinations: [macOS, iOS]
+    sources:
+      - Sources/Kit
+    dependencies:
+      - package: DiscogsKit
+        product: DiscogsKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mlkshkvch.recogs.kit
+        GENERATE_INFOPLIST_FILE: YES
+        DEFINES_MODULE: YES
+
   Recogs:
     type: application
     supportedDestinations: [macOS, iOS]
     sources:
-      - Recogs
+      - Sources/App
     dependencies:
-      - package: DiscogsKit
-        product: DiscogsKit
+      - target: RecogsKit
     info:
       path: Config/Info.plist
       properties:
@@ -58,12 +74,32 @@ targets:
         ENABLE_HARDENED_RUNTIME: YES
         TARGETED_DEVICE_FAMILY: "1,2"
 
+  # Not app-hosted: the runner is unsandboxed and needs no signing, which matters for the
+  # Keychain-backed token store.
+  RecogsTests:
+    type: bundle.unit-test
+    supportedDestinations: [macOS, iOS]
+    sources:
+      - Tests
+    dependencies:
+      - target: RecogsKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mlkshkvch.recogs.tests
+        GENERATE_INFOPLIST_FILE: YES
+
 schemes:
   Recogs:
     build:
       targets:
-        Recogs: all
+        RecogsKit: all
+        Recogs: [run, profile, archive, analyze]
+        RecogsTests: [test]
     run:
       config: Debug
+    test:
+      config: Debug
+      targets:
+        - RecogsTests
     archive:
       config: Release
