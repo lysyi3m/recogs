@@ -10,23 +10,20 @@ struct AddRecordView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var query = ""
-    @State private var results: [SearchResult] = []
-    @State private var state: SearchState = .idle
     @State private var confirming: SearchResult?
     @State private var editor: CollectionEditor?
+    @State private var search: ReleaseSearchController?
+    /// Shown when there is no client to search with, which is not a search failure.
+    @State private var noTokenMessage: String?
 
-    private enum SearchState: Equatable {
-        case idle
-        case searching
-        case loaded(total: Int)
-        case failed(String)
-    }
+    private var state: ReleaseSearchController.State { search?.state ?? .idle }
+    private var results: [SearchResult] { search?.results ?? [] }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
                 searchField
-                if let message = editor?.errorMessage {
+                if let message = noTokenMessage ?? editor?.errorMessage {
                     banner(message)
                 }
                 if editor?.isWorking == true {
@@ -55,7 +52,13 @@ struct AddRecordView: View {
         #if os(macOS)
         .frame(minWidth: 560, idealWidth: 680, minHeight: 480, idealHeight: 620)
         #endif
-        .task { editor = editor ?? services.makeEditor() }
+        .task {
+            editor = editor ?? services.makeEditor()
+            if search == nil, let client = services.client {
+                search = ReleaseSearchController(client: client)
+            }
+        }
+        .onDisappear { search?.cancel() }
         .alert(
             "Add this pressing?",
             isPresented: Binding(
@@ -80,7 +83,7 @@ struct AddRecordView: View {
                 .foregroundStyle(.secondary)
             TextField("Artist, album, or catalog number", text: $query)
                 .textFieldStyle(.plain)
-                .onSubmit { Task { await search() } }
+                .onSubmit(startSearch)
                 #if os(iOS)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)
@@ -93,7 +96,7 @@ struct AddRecordView: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
             }
-            Button("Search") { Task { await search() } }
+            Button("Search", action: startSearch)
                 .keyboardShortcut(.defaultAction)
                 .disabled(query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSearching)
         }
@@ -101,6 +104,17 @@ struct AddRecordView: View {
     }
 
     private var isSearching: Bool { state == .searching }
+
+    private func startSearch() {
+        guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        // Never fail silently: an unreachable client looks exactly like a search that did nothing.
+        guard let search else {
+            noTokenMessage = "No Discogs token. Add one in the collection screen first."
+            return
+        }
+        noTokenMessage = nil
+        search.search(query)
+    }
 
     private func banner(_ message: String) -> some View {
         Label(message, systemImage: "exclamationmark.triangle.fill")
@@ -129,7 +143,7 @@ struct AddRecordView: View {
             } description: {
                 Text(message)
             } actions: {
-                Button("Try Again") { Task { await search() } }
+                Button("Try Again", action: startSearch)
             }
         case .loaded(let total) where results.isEmpty:
             ContentUnavailableView.search(text: query)
@@ -164,28 +178,6 @@ struct AddRecordView: View {
             .filter { !$0.isEmpty }
         if !pressing.isEmpty { lines.append(pressing.joined(separator: " · ")) }
         return lines.joined(separator: "\n")
-    }
-
-    private func search() async {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        // Never fail silently: an unreachable client looks exactly like a search that did nothing.
-        guard let client = services.client else {
-            state = .failed("No Discogs token. Add one in the collection screen first.")
-            return
-        }
-
-        state = .searching
-        do {
-            let page = try await client.searchReleases(query: trimmed, perPage: 50)
-            results = page.results
-            state = .loaded(total: page.pagination.items)
-        } catch is CancellationError {
-            state = .idle
-        } catch {
-            results = []
-            state = .failed(error.localizedDescription)
-        }
     }
 
     private func add(_ result: SearchResult) async {
