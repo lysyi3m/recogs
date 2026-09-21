@@ -79,3 +79,77 @@ struct RateLimiterTests {
         #expect(capped <= 60)
     }
 }
+
+@Suite("RateLimiter deadlocks")
+struct RateLimiterDeadlockTests {
+    private func response(remaining: Int, status: Int = 200) throws -> HTTPURLResponse {
+        try #require(HTTPURLResponse(
+            url: URL(string: "https://api.discogs.com/oauth/identity")!,
+            statusCode: status,
+            httpVersion: "HTTP/1.1",
+            headerFields: [
+                "X-Discogs-Ratelimit": "60",
+                "X-Discogs-Ratelimit-Used": String(60 - remaining),
+                "X-Discogs-Ratelimit-Remaining": String(remaining),
+            ]
+        ))
+    }
+
+    @Test("A low remaining count stops gating once its window has passed")
+    func staleRemainingExpires() async throws {
+        let limiter = RateLimiter(limit: 60, safetyMargin: 5)
+        await limiter.update(from: try response(remaining: 1))
+
+        let observed = Date()
+        // Inside the window the reading still applies, and the wait is bounded rather than a
+        // fixed retry that could repeat forever.
+        let duringWindow = await limiter.decision(at: observed.addingTimeInterval(5))
+        #expect(duringWindow != .send)
+        if case .wait(let until) = duringWindow {
+            #expect(until.timeIntervalSince(observed) <= 61)
+        }
+
+        // Past the window the reading is meaningless: a request must go out to refresh it.
+        let afterWindow = await limiter.decision(at: observed.addingTimeInterval(61))
+        #expect(afterWindow == .send, "a stale reading must not gate requests forever")
+    }
+
+    @Test("A 429 does not leave the limiter permanently blocked")
+    func rateLimitedThenRecovers() async throws {
+        let limiter = RateLimiter(limit: 60, safetyMargin: 5, baseBackoff: 0.01, maximumBackoff: 0.02)
+        // A 429 reports no remaining requests; that count must not outlive the backoff.
+        await limiter.update(from: try response(remaining: 0, status: 429))
+        try await limiter.noteRateLimited(retryAfter: nil, attempt: 0)
+
+        let state = await limiter.state
+        #expect(state.remaining == nil, "counts from the 429 describe a window that has passed")
+
+        let decision = await limiter.decision(at: Date())
+        #expect(decision == .send, "the next request must be allowed to refresh the headers")
+    }
+
+    @Test("waitForSlot returns promptly after a 429 rather than hanging")
+    func waitForSlotRecoversAfterRateLimit() async throws {
+        let limiter = RateLimiter(limit: 60, safetyMargin: 5, baseBackoff: 0.01, maximumBackoff: 0.02)
+        await limiter.update(from: try response(remaining: 0, status: 429))
+        try await limiter.noteRateLimited(retryAfter: nil, attempt: 0)
+
+        let start = ContinuousClock.now
+        try await limiter.waitForSlot()
+        #expect(ContinuousClock.now - start < .seconds(1))
+    }
+
+    @Test("An exhausted budget still waits, and only until the window rolls")
+    func exhaustedBudgetWaitsBounded() async throws {
+        let limiter = RateLimiter(limit: 10, safetyMargin: 4)
+        let start = Date()
+        for _ in 0..<6 { try await limiter.waitForSlot() }
+
+        let decision = await limiter.decision(at: start)
+        guard case .wait(let until) = decision else {
+            Issue.record("expected a wait once the budget is spent")
+            return
+        }
+        #expect(until.timeIntervalSince(start) <= 61)
+    }
+}

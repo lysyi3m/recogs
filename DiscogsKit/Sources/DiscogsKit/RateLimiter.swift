@@ -26,9 +26,19 @@ public actor RateLimiter {
     private var limit: Int
     private var used: Int?
     private var remaining: Int?
+    /// When `remaining` was last read from a response. The value describes a moving 60-second
+    /// window, so it stops being meaningful once that window has passed.
+    private var remainingObservedAt: Date?
     private var sendTimestamps: [Date] = []
     /// Set after a 429; gates every caller until it passes.
     private var blockedUntil: Date?
+
+    /// What `waitForSlot` should do at a given instant. Separated from the waiting itself so the
+    /// decision can be tested without sleeping.
+    enum Decision: Equatable {
+        case send
+        case wait(until: Date)
+    }
 
     public init(
         limit: Int = 60,
@@ -49,36 +59,54 @@ public actor RateLimiter {
     /// Suspends until a request may be sent, then records the send.
     public func waitForSlot() async throws {
         while true {
-            let now = Date()
-
-            if let blockedUntil, blockedUntil > now {
-                try await sleep(until: blockedUntil)
-                continue
+            switch decision(at: Date()) {
+            case .send:
+                record(at: Date())
+                return
+            case .wait(let until):
+                try await sleep(until: until)
             }
-
-            prune(now: now)
-
-            let budget = max(1, limit - safetyMargin)
-            if sendTimestamps.count >= budget, let oldest = sendTimestamps.first {
-                try await sleep(until: oldest.addingTimeInterval(Self.window))
-                continue
-            }
-
-            // The server says we are inside the safety margin. Wait for our oldest send to age out
-            // of the window; with no local record, pause briefly and re-read.
-            if let remaining, remaining <= safetyMargin {
-                let wake = sendTimestamps.first?.addingTimeInterval(Self.window)
-                    ?? now.addingTimeInterval(1)
-                try await sleep(until: wake)
-                continue
-            }
-
-            sendTimestamps.append(now)
-            // Decrement optimistically so concurrent callers see the cost of in-flight requests
-            // before their responses land.
-            if let current = remaining { remaining = max(current - 1, 0) }
-            return
         }
+    }
+
+    /// Decides whether a request may go out now.
+    ///
+    /// Every wait this returns is bounded, and each one ends in a state closer to `.send`: local
+    /// sends age out of the window, and a server-reported `remaining` expires with the window it
+    /// describes. Without that expiry a stale low `remaining` is self-perpetuating — nothing is
+    /// sent, so no response arrives to correct it.
+    func decision(at now: Date) -> Decision {
+        if let blockedUntil, blockedUntil > now {
+            return .wait(until: blockedUntil)
+        }
+
+        prune(now: now)
+
+        let budget = max(1, limit - safetyMargin)
+        if sendTimestamps.count >= budget, let oldest = sendTimestamps.first {
+            return .wait(until: oldest.addingTimeInterval(Self.window))
+        }
+
+        // The server said we were inside the safety margin. Honour that only while the reading
+        // still describes the current window.
+        if let remaining, remaining <= safetyMargin,
+           let observedAt = remainingObservedAt,
+           now.timeIntervalSince(observedAt) < Self.window {
+            // Wait for one of our own sends to age out, or failing that for the reading itself to
+            // expire, after which a request goes out and refreshes it.
+            let wake = sendTimestamps.first?.addingTimeInterval(Self.window)
+                ?? observedAt.addingTimeInterval(Self.window)
+            return .wait(until: wake)
+        }
+
+        return .send
+    }
+
+    private func record(at now: Date) {
+        sendTimestamps.append(now)
+        // Decrement optimistically so concurrent callers see the cost of in-flight requests
+        // before their responses land.
+        if let current = remaining { remaining = max(current - 1, 0) }
     }
 
     /// Absorbs the rate-limit headers from a response. Clears any active 429 block.
@@ -94,6 +122,7 @@ public actor RateLimiter {
         if let value = response.value(forHTTPHeaderField: "X-Discogs-Ratelimit-Remaining"),
            let parsed = Int(value.trimmingCharacters(in: .whitespaces)) {
             remaining = parsed
+            remainingObservedAt = Date()
         }
         if response.statusCode != 429 {
             blockedUntil = nil
@@ -109,6 +138,11 @@ public actor RateLimiter {
         // A 429 means the window is already full; drop local history so it is rebuilt after the block.
         sendTimestamps.removeAll()
         try await sleep(until: until)
+        // The backoff has passed, so the counts that came with the 429 describe a window that is
+        // over. Keeping them would gate every later request on a reading that can never refresh.
+        remaining = nil
+        used = nil
+        remainingObservedAt = nil
         return delay
     }
 
