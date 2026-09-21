@@ -9,6 +9,7 @@ struct CollectionGridView: View {
     @Query private var items: [CachedCollectionItem]
 
     private let itemWidth: CGFloat
+    private let searchQuery: String
     private let onSelect: (CachedCollectionItem) -> Void
     private let onRequestRemove: (CachedCollectionItem) -> Void
 
@@ -16,18 +17,30 @@ struct CollectionGridView: View {
         sort: CollectionSortOption,
         direction: SortDirection,
         itemWidth: CGFloat,
+        searchQuery: String,
         onSelect: @escaping (CachedCollectionItem) -> Void,
         onRequestRemove: @escaping (CachedCollectionItem) -> Void
     ) {
         var descriptor = FetchDescriptor<CachedCollectionItem>()
         descriptor.sortBy = sort.sortDescriptors(direction)
+        // Filtering in the fetch rather than over the results keeps the grid lazy.
+        descriptor.predicate = CachedCollectionItem.searchPredicate(matching: searchQuery)
         _items = Query(descriptor)
+        self.searchQuery = searchQuery
         self.itemWidth = itemWidth
         self.onSelect = onSelect
         self.onRequestRemove = onRequestRemove
     }
 
     var body: some View {
+        if items.isEmpty, !searchQuery.isEmpty {
+            ContentUnavailableView.search(text: searchQuery)
+        } else {
+            grid
+        }
+    }
+
+    private var grid: some View {
         ScrollView {
             LazyVGrid(
                 columns: [GridItem(.adaptive(minimum: itemWidth), spacing: spacing)],

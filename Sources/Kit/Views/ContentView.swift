@@ -14,6 +14,7 @@ public struct ContentView: View {
 
     @State private var selection: CachedCollectionItem?
     @State private var isAdding = false
+    @State private var searchQuery = ""
     @State private var editor: CollectionEditor?
     @State private var pendingRemoval: CachedCollectionItem?
     #if os(iOS)
@@ -44,6 +45,13 @@ public struct ContentView: View {
                 .navigationBarTitleDisplayMode(services.hasToken ? .large : .inline)
                 #endif
                 .toolbar { toolbarContent }
+                // Filters the cached collection as you type; the add sheet is what searches
+                // Discogs itself.
+                .searchable(
+                    text: $searchQuery,
+                    placement: .toolbar,
+                    prompt: "Find in Collection"
+                )
                 .navigationDestination(item: $selection) { item in
                     RecordDetailView(item: item)
                 }
@@ -115,6 +123,7 @@ public struct ContentView: View {
                 sort: sort,
                 direction: direction,
                 itemWidth: itemWidth,
+                searchQuery: searchQuery,
                 onSelect: { selection = $0 },
                 onRequestRemove: { pendingRemoval = $0 }
             )
@@ -226,7 +235,7 @@ public struct ContentView: View {
         // not drift as the status text changes length.
         .overlay {
             if selection == nil {
-                Text("^[\(allItems.count) record](inflect: true)")
+                countLabel
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
@@ -234,6 +243,22 @@ public struct ContentView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .frame(minHeight: 28)
+    }
+
+    /// Reads as a plain count normally, and says how much of the collection is showing while a
+    /// search narrows it. Built as `Text` so the inflection markup is actually resolved.
+    @ViewBuilder
+    private var countLabel: some View {
+        if searchQuery.isEmpty {
+            Text("^[\(allItems.count) record](inflect: true)")
+        } else {
+            Text("\(matchCount) of \(allItems.count)")
+        }
+    }
+
+    private var matchCount: Int {
+        let predicate = CachedCollectionItem.searchPredicate(matching: searchQuery)
+        return allItems.filter { (try? predicate.evaluate($0)) ?? false }.count
     }
 
     private var densityControls: some View {

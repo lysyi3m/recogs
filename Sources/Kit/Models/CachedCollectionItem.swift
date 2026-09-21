@@ -129,6 +129,20 @@ final class CachedCollectionItem {
         sortTitle = Self.sortKey(item.basicInformation.title)
     }
 
+    /// Matches a record against what was typed in the collection's search field.
+    ///
+    /// Defined once and used both as the grid's fetch predicate and, evaluated in Swift, for the
+    /// count in the status bar, so the two can never disagree about what matched.
+    /// `localizedStandardContains` is the search users expect: case- and diacritic-insensitive,
+    /// so "bjork" finds "Björk".
+    static func searchPredicate(matching query: String) -> Predicate<CachedCollectionItem> {
+        #Predicate<CachedCollectionItem> { item in
+            query.isEmpty
+                || item.title.localizedStandardContains(query)
+                || item.artistName.localizedStandardContains(query)
+        }
+    }
+
     /// The best artwork available, and the cache slot it belongs in.
     ///
     /// Discogs serves the thumb at 150px and quality 40, which the grid draws at up to 260pt —
