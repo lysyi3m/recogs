@@ -1,54 +1,49 @@
 import SwiftUI
 
-/// Full record view: cover, pressing details, tracklist, and a link out to Discogs.
+/// One record: cover, the facts that identify the pressing, and its tracklist on request.
 ///
-/// Everything already in the collection snapshot renders immediately; only the tracklist and the
-/// full-size cover wait on the release fetch, so the screen is never blank.
+/// The collection snapshot already holds everything that identifies a pressing, so the page is
+/// complete the moment it opens. Only the tracklist needs Discogs, and only when it is opened.
 struct RecordDetailView: View {
     let item: CachedCollectionItem
 
     @Environment(AppServices.self) private var services
     @Environment(\.dismiss) private var dismiss
+
     @State private var loader: ReleaseDetailLoader?
     @State private var editor: CollectionEditor?
     @State private var isConfirmingRemoval = false
+    @State private var isTracklistExpanded = false
 
-    private var detail: ReleaseDetailSnapshot? {
-        if case .loaded(let snapshot) = loader?.state { return snapshot }
-        return nil
-    }
+    private var detail: ReleaseDetailSnapshot? { loader?.snapshot }
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 28) {
                 header
-                metadata
+                if let message = editor?.errorMessage {
+                    Label(message, systemImage: "exclamationmark.triangle.fill")
+                        .font(.callout)
+                        .foregroundStyle(.red)
+                }
+                facts
                 tracklist
-                if let notes = detail?.notes, !notes.isEmpty {
-                    section("Notes") {
-                        Text(notes).font(.callout)
-                    }
-                }
-                if let link = discogsURL {
-                    Link(destination: link) {
-                        Label("View on Discogs", systemImage: "arrow.up.right.square")
-                    }
-                }
-
-                removeSection
+                notes
             }
-            .frame(maxWidth: 640, alignment: .leading)
-            .frame(maxWidth: .infinity)
-            .padding(24)
+            .frame(maxWidth: 780, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(28)
         }
         .navigationTitle(item.title)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        .toolbar { actions }
         .task {
             editor = editor ?? services.makeEditor()
             let loader = loader ?? ReleaseDetailLoader(services: services)
             self.loader = loader
+            // Tracklist, notes and country arrive together; one fetch covers the page.
             await loader.load(releaseID: item.releaseID)
         }
         .confirmationDialog(
@@ -67,32 +62,43 @@ struct RecordDetailView: View {
         }
     }
 
-    @ViewBuilder
-    private var removeSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Divider()
-            if let message = editor?.errorMessage {
-                Label(message, systemImage: "exclamationmark.triangle.fill")
-                    .font(.callout)
-                    .foregroundStyle(.red)
-            }
-            Button(role: .destructive) {
-                isConfirmingRemoval = true
+    // MARK: - Actions
+
+    /// Record-scoped actions live in the toolbar rather than the page body: they are about the
+    /// record rather than part of it, and this is where the folder actions will go too.
+    @ToolbarContentBuilder
+    private var actions: some ToolbarContent {
+        ToolbarItem {
+            Menu {
+                if let link = discogsURL {
+                    Link(destination: link) {
+                        Label("View on Discogs", systemImage: "arrow.up.right.square")
+                    }
+                }
+                Divider()
+                Button(role: .destructive) {
+                    isConfirmingRemoval = true
+                } label: {
+                    Label("Remove from Collection", systemImage: "trash")
+                }
+                .disabled(editor?.isWorking ?? true)
             } label: {
-                Label("Remove from Collection", systemImage: "trash")
+                Label("Actions", systemImage: "ellipsis.circle")
             }
-            .disabled(editor?.isWorking ?? true)
-            Text("Sold it, or added it by mistake.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
         }
     }
 
+    private var discogsURL: URL? {
+        detail?.discogsURL.flatMap(URL.init(string:))
+            ?? URL(string: "https://www.discogs.com/release/\(item.releaseID)")
+    }
+
+    // MARK: - Header
+
     /// Which image to show, and which cache slot it belongs in.
     ///
-    /// The full-size image only arrives with the release fetch; the collection snapshot carries a
-    /// mid-size cover that stands in until then. When neither exists the thumb is shown, but as a
-    /// thumb — writing it into the cover slot would cache a 150px image as this release's cover
+    /// When neither a release nor a collection cover exists the thumb is shown, but as a thumb —
+    /// writing it into the cover slot would cache a 150px image as this release's cover
     /// permanently, and nothing would ever replace it.
     private var coverSource: (url: String?, kind: ImageCache.Kind) {
         if let cover = detail?.coverURL ?? item.coverURL, !cover.isEmpty {
@@ -101,73 +107,155 @@ struct RecordDetailView: View {
         return (item.thumbURL, .thumb)
     }
 
-    private var discogsURL: URL? {
-        detail?.discogsURL.flatMap(URL.init(string:))
-            ?? URL(string: "https://www.discogs.com/release/\(item.releaseID)")
-    }
-
     private var header: some View {
-        HStack(alignment: .top, spacing: 20) {
+        HStack(alignment: .top, spacing: 24) {
             CoverImageView(
                 releaseID: item.releaseID,
                 remoteURL: coverSource.url,
                 kind: coverSource.kind,
-                edge: 240
+                edge: 200
             )
-            .frame(width: 240, height: 240)
+            .frame(width: 200, height: 200)
             .clipShape(.rect(cornerRadius: 8))
             .shadow(radius: 6, y: 3)
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text(item.title).font(.title2.weight(.semibold))
-                Text(item.artistName).font(.title3).foregroundStyle(.secondary)
-                if let year = item.year {
-                    Text(String(year)).font(.callout).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 8) {
+                Text(item.title)
+                    .font(.title2.weight(.semibold))
+                    .textSelection(.enabled)
+                Text(item.artistName)
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+
+                if !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 2)
                 }
-                Text(item.formatSummary).font(.callout).foregroundStyle(.secondary)
+                if !item.genres.isEmpty || !item.styles.isEmpty {
+                    TagRow(tags: item.genres + item.styles)
+                        .padding(.top, 4)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// Year and format, the two things that distinguish one pressing from another at a glance.
+    private var subtitle: String {
+        [item.year.map(String.init), item.formatSummary.isEmpty ? nil : item.formatSummary]
+            .compactMap { $0 }
+            .joined(separator: " · ")
+    }
+
+    // MARK: - Facts
+
+    /// The pressing details, as a wrapping grid rather than a column of full-width rows: seven
+    /// two-word facts do not need seven lines of a wide window.
+    @ViewBuilder
+    private var facts: some View {
+        let entries = factEntries
+        if !entries.isEmpty {
+            section("Pressing") {
+                LazyVGrid(
+                    // Sized so the five usual facts sit on one line at this page's width; a
+                    // lone "Added" wrapping to a second row looks like a mistake.
+                    columns: [GridItem(.adaptive(minimum: 130), spacing: 16, alignment: .leading)],
+                    alignment: .leading,
+                    spacing: 16
+                ) {
+                    ForEach(entries, id: \.label) { entry in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(entry.label)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(entry.value)
+                                .font(.callout)
+                                .textSelection(.enabled)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
             }
         }
     }
 
-    private var metadata: some View {
-        section("Pressing") {
-            VStack(alignment: .leading, spacing: 6) {
-                row("Label", item.labelName)
-                row("Catalog number", item.catalogNumber)
-                row("Released", detail?.releasedDisplay)
-                row("Country", detail?.country)
-                row("Genres", item.genres.isEmpty ? nil : item.genres.joined(separator: ", "))
-                row("Styles", item.styles.isEmpty ? nil : item.styles.joined(separator: ", "))
-                row("Added", item.dateAdded?.formatted(date: .abbreviated, time: .omitted))
+    private var factEntries: [(label: String, value: String)] {
+        var entries: [(String, String)] = []
+        func add(_ label: String, _ value: String?) {
+            guard let value, !value.isEmpty else { return }
+            entries.append((label, value))
+        }
+        add("Label", item.labelName)
+        add("Catalog number", item.catalogNumber)
+        add("Released", detail?.releasedDisplay)
+        add("Country", detail?.country)
+        add("Added", item.dateAdded?.formatted(date: .abbreviated, time: .omitted))
+        return entries
+    }
+
+    // MARK: - Tracklist
+
+    @ViewBuilder
+    private var tracklist: some View {
+        DisclosureGroup(isExpanded: $isTracklistExpanded) {
+            tracklistContent
+                .padding(.top, 8)
+        } label: {
+            HStack(spacing: 8) {
+                Text("Tracklist").font(.headline)
+                if let count = detail?.playableTracks.count {
+                    Text("\(count)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                if loader?.state == .loading {
+                    ProgressView().controlSize(.small)
+                }
+            }
+        }
+
+    }
+
+    @ViewBuilder
+    private var notes: some View {
+        if let notes = detail?.notes, !notes.isEmpty {
+            section("Notes") {
+                Text(notes)
+                    .font(.callout)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
 
     @ViewBuilder
-    private var tracklist: some View {
-        section("Tracklist") {
-            switch loader?.state {
-            case .loaded(let snapshot) where !snapshot.tracks.isEmpty:
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(snapshot.tracks) { track in
-                        TrackRow(track: track)
-                        if track.id != snapshot.tracks.last?.id { Divider() }
-                    }
+    private var tracklistContent: some View {
+        switch loader?.state {
+        case .loaded(let snapshot) where !snapshot.tracks.isEmpty:
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(snapshot.tracks) { track in
+                    TrackRow(track: track)
+                    if track.id != snapshot.tracks.last?.id { Divider() }
                 }
-            case .loaded:
-                Text("Discogs lists no tracks for this release.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            case .failed(let message):
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(message).font(.callout).foregroundStyle(.red)
-                    Button("Try Again") {
-                        Task { await loader?.load(releaseID: item.releaseID) }
-                    }
-                }
-            case .loading, nil:
-                ProgressView().controlSize(.small)
             }
+        case .loaded:
+            Text("Discogs lists no tracks for this release.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+        case .failed(let message):
+            VStack(alignment: .leading, spacing: 8) {
+                Text(message).font(.callout).foregroundStyle(.red)
+                Button("Try Again") {
+                    Task { await loader?.load(releaseID: item.releaseID) }
+                }
+            }
+        case .loading, nil:
+            Text("Fetching from Discogs…")
+                .font(.callout)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -178,17 +266,20 @@ struct RecordDetailView: View {
             content()
         }
     }
+}
 
-    @ViewBuilder
-    private func row(_ label: String, _ value: String?) -> some View {
-        if let value, !value.isEmpty {
-            HStack(alignment: .firstTextBaseline) {
-                Text(label)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .frame(width: 130, alignment: .leading)
-                Text(value).font(.callout)
-                Spacer(minLength: 0)
+/// Genres and styles as unobtrusive chips, which read faster than a comma-separated list.
+private struct TagRow: View {
+    let tags: [String]
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(tags.prefix(5), id: \.self) { tag in
+                Text(tag)
+                    .font(.caption)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(.quaternary, in: .capsule)
             }
         }
     }
