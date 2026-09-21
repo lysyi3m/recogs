@@ -129,6 +129,19 @@ final class CachedCollectionItem {
         sortTitle = Self.sortKey(item.basicInformation.title)
     }
 
+    /// The best artwork available, and the cache slot it belongs in.
+    ///
+    /// Discogs serves the thumb at 150px and quality 40, which the grid draws at up to 260pt —
+    /// three times its size on a Retina display. `cover_image` is 600px at quality 90 and costs
+    /// about 20 KB, so it is worth using everywhere the art is more than a row icon.
+    ///
+    /// The kind follows the URL: caching a 150px thumb in the cover slot would fix this release's
+    /// cover as a thumb permanently, and nothing would replace it.
+    var artwork: (url: String?, kind: ImageCache.Kind) {
+        if let coverURL, !coverURL.isEmpty { return (coverURL, .cover) }
+        return (thumbURL, .thumb)
+    }
+
     /// Lowercases and drops a leading article so "The Beatles" sorts under B.
     static func sortKey(_ value: String) -> String {
         let folded = value.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: .current)

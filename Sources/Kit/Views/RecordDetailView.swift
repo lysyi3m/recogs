@@ -101,10 +101,8 @@ struct RecordDetailView: View {
     /// writing it into the cover slot would cache a 150px image as this release's cover
     /// permanently, and nothing would ever replace it.
     private var coverSource: (url: String?, kind: ImageCache.Kind) {
-        if let cover = detail?.coverURL ?? item.coverURL, !cover.isEmpty {
-            return (cover, .cover)
-        }
-        return (item.thumbURL, .thumb)
+        if let cover = detail?.coverURL, !cover.isEmpty { return (cover, .cover) }
+        return item.artwork
     }
 
     private var header: some View {

@@ -17,7 +17,8 @@ Native macOS + iOS SwiftUI app for managing a personal vinyl collection via the 
   off `instance_id`, not `release_id`.
 
 ## Caching
-- Cache images permanently on disk, keyed by release id; thumbs first, full-res lazily. Never re-fetch.
+- Cache images permanently on disk, keyed by release id and size. The grid and the record page both
+  draw `cover_image` (600px, quality 90); the 150px thumb is a fallback and a row icon. Never re-fetch.
 - SwiftData holds every collection item so the collection is browsable offline.
 
 ## Secrets — never commit

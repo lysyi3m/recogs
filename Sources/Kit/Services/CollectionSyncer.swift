@@ -18,7 +18,7 @@ actor CollectionSyncer {
         var username: String
         var itemsSynced: Int
         var itemsRemoved: Int
-        var thumbsFetched: Int
+        var imagesFetched: Int
     }
 
     private let client: DiscogsClient
@@ -43,7 +43,7 @@ actor CollectionSyncer {
 
         var seenInstanceIDs = Set<Int>()
         var itemsSynced = 0
-        var thumbTargets: [(releaseID: Int, url: URL)] = []
+        var artworkTargets: [(releaseID: Int, url: URL, kind: ImageCache.Kind)] = []
 
         for try await page in client.collectionPages(user: identity.username) {
             try Task.checkCancellation()
@@ -51,8 +51,12 @@ actor CollectionSyncer {
 
             for item in page.releases {
                 seenInstanceIDs.insert(item.instanceID)
-                if let thumb = item.basicInformation.thumb, let url = URL(string: thumb) {
-                    thumbTargets.append((item.releaseID, url))
+                // The grid draws cover art, so that is what is worth having on disk before the
+                // user scrolls. The thumb is only a fallback for releases with no cover.
+                let source = item.basicInformation.coverImage ?? item.basicInformation.thumb
+                let kind: ImageCache.Kind = item.basicInformation.coverImage == nil ? .thumb : .cover
+                if let source, let url = URL(string: source) {
+                    artworkTargets.append((item.releaseID, url, kind))
                 }
             }
             itemsSynced += page.releases.count
@@ -66,29 +70,29 @@ actor CollectionSyncer {
         }
 
         let itemsRemoved = try await store.pruneItems(keeping: seenInstanceIDs)
-        let thumbsFetched = await warmThumbs(thumbTargets)
+        let imagesFetched = await warmArtwork(artworkTargets)
 
         return Summary(
             username: identity.username,
             itemsSynced: itemsSynced,
             itemsRemoved: itemsRemoved,
-            thumbsFetched: thumbsFetched
+            imagesFetched: imagesFetched
         )
     }
 
-    /// Downloads any thumb not already on disk. Failures are skipped: a missing cover must not fail
-    /// a sync that otherwise succeeded, and the next refresh will try again.
-    private func warmThumbs(_ targets: [(releaseID: Int, url: URL)]) async -> Int {
+    /// Downloads any artwork not already on disk. Failures are skipped: a missing cover must not
+    /// fail a sync that otherwise succeeded, and the next refresh will try again.
+    private func warmArtwork(_ targets: [(releaseID: Int, url: URL, kind: ImageCache.Kind)]) async -> Int {
         await withTaskGroup(of: Bool.self) { group in
             for target in targets {
                 group.addTask { [imageCache] in
-                    if await imageCache.isCached(releaseID: target.releaseID, kind: .thumb) {
+                    if await imageCache.isCached(releaseID: target.releaseID, kind: target.kind) {
                         return false
                     }
                     do {
                         try await imageCache.localURL(
                             releaseID: target.releaseID,
-                            kind: .thumb,
+                            kind: target.kind,
                             remoteURL: target.url
                         )
                         return true

@@ -71,8 +71,8 @@ private struct CoverCell: View {
         VStack(alignment: .leading, spacing: 7) {
             CoverImageView(
                 releaseID: item.releaseID,
-                remoteURL: item.thumbURL,
-                kind: .thumb,
+                remoteURL: item.artwork.url,
+                kind: item.artwork.kind,
                 edge: edge
             )
             .frame(width: edge, height: edge)
