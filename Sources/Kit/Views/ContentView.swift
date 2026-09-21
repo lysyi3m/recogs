@@ -36,7 +36,6 @@ public struct ContentView: View {
                 .navigationBarTitleDisplayMode(services.hasToken ? .large : .inline)
                 #endif
                 .toolbar { toolbarContent }
-                .safeAreaInset(edge: .bottom) { densityBar }
                 .navigationDestination(item: $selection) { item in
                     RecordDetailView(item: item)
                 }
@@ -46,6 +45,8 @@ public struct ContentView: View {
                         .modelContainer(services.modelContainer)
                 }
         }
+        // Outside the stack, so the status stays visible on the record detail too.
+        .safeAreaInset(edge: .bottom) { statusBar }
         .task {
             let controller = syncController ?? SyncController(services: services)
             syncController = controller
@@ -163,54 +164,89 @@ public struct ContentView: View {
         return "\(progress.itemsFetched) of \(progress.totalItems) records"
     }
 
-    /// Status line under the grid: sync progress, then any problem, then when it last worked.
+    /// One row: what you can change on the left, what is happening on the right.
     @ViewBuilder
-    private var statusLine: some View {
+    private var statusBar: some View {
+        if services.hasToken {
+            VStack(spacing: 0) {
+                // Without this the bar is invisible against the record detail's light background.
+                Divider()
+                barContents
+            }
+            .background(.bar)
+        }
+    }
+
+    private var barContents: some View {
+        HStack(spacing: 12) {
+            // The density control belongs to the grid, so it goes away on the detail screen.
+            if selection == nil { densityControls }
+            Spacer(minLength: 12)
+            syncStatus
+        }
+        // Overlaid rather than placed between the two, so it centres on the bar itself and does
+        // not drift as the status text changes length.
+        .overlay {
+            if selection == nil {
+                Text("^[\(allItems.count) record](inflect: true)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .frame(minHeight: 28)
+    }
+
+    private var densityControls: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "square.grid.3x3.fill").imageScale(.small)
+            Slider(value: $itemWidth, in: 60...260)
+                .frame(width: 140)
+                .controlSize(.small)
+            Image(systemName: "square.fill").imageScale(.small)
+        }
+        .foregroundStyle(.secondary)
+    }
+
+    /// Always says something: a sync in flight, a problem, or when it last worked.
+    @ViewBuilder
+    private var syncStatus: some View {
         if let progress = syncController?.progress {
-            ProgressView(
-                value: Double(progress.itemsFetched),
-                total: Double(max(progress.totalItems, 1))
-            )
-            .progressViewStyle(.linear)
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Syncing \(progress.itemsFetched) of \(progress.totalItems)")
+            }
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.secondary)
+        } else if syncController?.isSyncing == true {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("Syncing…")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
         } else if let errorMessage = editor?.errorMessage ?? syncController?.errorMessage {
             Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
                 .font(.caption)
                 .foregroundStyle(.red)
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .help(errorMessage)
         } else if syncController?.isOffline == true {
-            Label("Offline — showing your cached collection", systemImage: "wifi.slash")
+            Label("Offline — showing cached collection", systemImage: "wifi.slash")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .lineLimit(1)
         } else if let lastSyncedAt = syncController?.lastSyncedAt {
             Text("Synced \(lastSyncedAt.formatted(.relative(presentation: .named)))")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-    }
-
-    @ViewBuilder
-    private var densityBar: some View {
-        if services.hasToken, !allItems.isEmpty {
-            VStack(spacing: 4) {
-                statusLine
-
-                HStack(spacing: 10) {
-                    Image(systemName: "square.grid.4x3.fill").imageScale(.small)
-                    // Inverted: dragging right means denser, so smaller covers.
-                    Slider(value: $itemWidth, in: 60...260)
-                    Image(systemName: "square.fill").imageScale(.small)
-                    Text("\(allItems.count)")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
+                .lineLimit(1)
+        } else {
+            Text("Not synced yet")
+                .font(.caption)
                 .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(.bar)
         }
     }
 }
