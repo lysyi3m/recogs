@@ -21,3 +21,7 @@ build/
 *.xcodeproj/
 Config/*.plist
 Config/*.entitlements
+# Hand-written, not generated: iOS needs entitlements macOS rejects.
+!Config/Recogs-iOS.entitlements
+# Projected from .env by `make generate`; Config/Base.xcconfig includes it optionally.
+Config/Local.xcconfig

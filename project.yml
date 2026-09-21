@@ -11,6 +11,10 @@ options:
     macOS: "14.0"
     iOS: "17.0"
 
+configFiles:
+  Debug: Config/Base.xcconfig
+  Release: Config/Base.xcconfig
+
 settings:
   base:
     SWIFT_VERSION: "6.0"
@@ -73,6 +77,10 @@ targets:
         ENABLE_PREVIEWS: YES
         ENABLE_HARDENED_RUNTIME: YES
         TARGETED_DEVICE_FAMILY: "1,2"
+        # iOS needs application-identifier and keychain-access-groups for the Keychain, and macOS
+        # rejects application-identifier outright, so the two platforms take different files.
+        CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]: Config/Recogs-iOS.entitlements
+        CODE_SIGN_ENTITLEMENTS[sdk=iphonesimulator*]: Config/Recogs-iOS.entitlements
 
   # Not app-hosted: the runner is unsandboxed and needs no signing, which matters for the
   # Keychain-backed token store.
