@@ -44,7 +44,7 @@ struct SetupView: View {
             branding
             form
         }
-        .frame(maxWidth: 320)
+        .frame(maxWidth: 360)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(32)
         .animation(.default, value: state)

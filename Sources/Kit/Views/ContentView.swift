@@ -146,6 +146,13 @@ public struct ContentView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
+        if !services.hasToken {
+            // macOS only builds a window toolbar when something is in it. With no items, the
+            // onboarding window falls back to a short plain title bar and the window visibly
+            // changes shape once a token is entered. A spacer gives the toolbar something to hold
+            // without drawing a control or the divider a placeholder item would.
+            ToolbarSpacer(.flexible)
+        }
         if services.hasToken {
             addButton
             sortMenu
