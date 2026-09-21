@@ -13,6 +13,33 @@ public enum DiscogsError: Error, Sendable {
     case invalidURL
 }
 
+extension DiscogsError {
+    /// True when the request never reached Discogs. The app stays usable from cache in this state,
+    /// so it is worth distinguishing from a server-side failure.
+    public var isOffline: Bool {
+        guard case .transport(let underlying) = self,
+              let urlError = underlying as? URLError else { return false }
+        switch urlError.code {
+        case .notConnectedToInternet, .networkConnectionLost, .cannotConnectToHost,
+             .cannotFindHost, .dataNotAllowed, .timedOut, .internationalRoamingOff:
+            return true
+        default:
+            return false
+        }
+    }
+
+    public var isRateLimited: Bool {
+        if case .rateLimited = self { return true }
+        return false
+    }
+
+    /// True when the token is missing, wrong, or revoked, so the fix is to re-enter it.
+    public var isUnauthorized: Bool {
+        if case .unauthorized = self { return true }
+        return false
+    }
+}
+
 extension DiscogsError: LocalizedError {
     public var errorDescription: String? {
         switch self {
@@ -29,8 +56,11 @@ extension DiscogsError: LocalizedError {
             return message ?? "Discogs returned HTTP \(status)."
         case .decoding:
             return "Could not decode the Discogs response."
-        case .transport(let underlying):
-            return underlying.localizedDescription
+        case .transport:
+            return isOffline
+                ? "No connection to Discogs. Your collection is still browsable from this device."
+                : "Could not reach Discogs."
+
         case .invalidURL:
             return "Could not build a valid request URL."
         }

@@ -29,7 +29,12 @@ public struct ContentView: View {
     public var body: some View {
         NavigationStack {
             content
-                .navigationTitle("Collection")
+                // First run has no collection to title, and "Collection" above "Welcome to
+                // Recogs" reads as a stray label.
+                .navigationTitle(services.hasToken ? "Collection" : "")
+                #if os(iOS)
+                .navigationBarTitleDisplayMode(services.hasToken ? .large : .inline)
+                #endif
                 .toolbar { toolbarContent }
                 .safeAreaInset(edge: .bottom) { densityBar }
                 .navigationDestination(item: $selection) { item in
@@ -42,8 +47,11 @@ public struct ContentView: View {
                 }
         }
         .task {
-            if syncController == nil { syncController = SyncController(services: services) }
+            let controller = syncController ?? SyncController(services: services)
+            syncController = controller
             if editor == nil { editor = services.makeEditor() }
+            // On-launch delta, skipped when a sync ran moments ago.
+            if controller.shouldSyncOnLaunch { await controller.sync() }
         }
         .confirmationDialog(
             "Remove this copy?",
@@ -66,7 +74,15 @@ public struct ContentView: View {
     @ViewBuilder
     private var content: some View {
         if !services.hasToken {
-            SetupView()
+            SetupView { Task { await syncController?.sync() } }
+        } else if allItems.isEmpty, syncController?.isSyncing == true {
+            // First sync on a fresh install: an empty grid with a spinner beats an empty-state
+            // screen that is about to be wrong.
+            VStack(spacing: 12) {
+                ProgressView()
+                Text(initialSyncStatus).font(.callout).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if allItems.isEmpty {
             ContentUnavailableView {
                 Label("No Records Yet", systemImage: "square.stack")
@@ -85,6 +101,7 @@ public struct ContentView: View {
                 onSelect: { selection = $0 },
                 onRequestRemove: { pendingRemoval = $0 }
             )
+            .refreshable { await syncController?.sync() }
         }
     }
 
@@ -141,22 +158,44 @@ public struct ContentView: View {
         }
     }
 
+    private var initialSyncStatus: String {
+        guard let progress = syncController?.progress else { return "Fetching your collection…" }
+        return "\(progress.itemsFetched) of \(progress.totalItems) records"
+    }
+
+    /// Status line under the grid: sync progress, then any problem, then when it last worked.
+    @ViewBuilder
+    private var statusLine: some View {
+        if let progress = syncController?.progress {
+            ProgressView(
+                value: Double(progress.itemsFetched),
+                total: Double(max(progress.totalItems, 1))
+            )
+            .progressViewStyle(.linear)
+        } else if let errorMessage = editor?.errorMessage ?? syncController?.errorMessage {
+            Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                .font(.caption)
+                .foregroundStyle(.red)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else if syncController?.isOffline == true {
+            Label("Offline — showing your cached collection", systemImage: "wifi.slash")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else if let lastSyncedAt = syncController?.lastSyncedAt {
+            Text("Synced \(lastSyncedAt.formatted(.relative(presentation: .named)))")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
     @ViewBuilder
     private var densityBar: some View {
         if services.hasToken, !allItems.isEmpty {
             VStack(spacing: 4) {
-                if let progress = syncController?.progress {
-                    ProgressView(
-                        value: Double(progress.itemsFetched),
-                        total: Double(max(progress.totalItems, 1))
-                    )
-                    .progressViewStyle(.linear)
-                } else if let errorMessage = editor?.errorMessage ?? syncController?.errorMessage {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .lineLimit(2)
-                }
+                statusLine
 
                 HStack(spacing: 10) {
                     Image(systemName: "square.grid.4x3.fill").imageScale(.small)
