@@ -162,17 +162,23 @@ public struct ContentView: View {
     private var sortMenu: some ToolbarContent {
         ToolbarItem {
             Menu {
+                // Inline, so the keys and the direction sit in one flat menu with checkmarks.
+                // A plain picker in a menu becomes a submenu, which buries a two-click choice.
                 Picker("Sort By", selection: $sortRaw) {
                     ForEach(CollectionSortOption.allCases) { option in
                         Text(option.label).tag(option.rawValue)
                     }
                 }
+                .pickerStyle(.inline)
+
                 Divider()
+
                 Picker("Order", selection: $directionRaw) {
                     ForEach(SortDirection.allCases) { option in
                         Text(option.label).tag(option.rawValue)
                     }
                 }
+                .pickerStyle(.inline)
             } label: {
                 Label("Sort", systemImage: "arrow.up.arrow.down")
             }
