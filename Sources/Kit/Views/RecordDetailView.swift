@@ -88,6 +88,19 @@ struct RecordDetailView: View {
         }
     }
 
+    /// Which image to show, and which cache slot it belongs in.
+    ///
+    /// The full-size image only arrives with the release fetch; the collection snapshot carries a
+    /// mid-size cover that stands in until then. When neither exists the thumb is shown, but as a
+    /// thumb — writing it into the cover slot would cache a 150px image as this release's cover
+    /// permanently, and nothing would ever replace it.
+    private var coverSource: (url: String?, kind: ImageCache.Kind) {
+        if let cover = detail?.coverURL ?? item.coverURL, !cover.isEmpty {
+            return (cover, .cover)
+        }
+        return (item.thumbURL, .thumb)
+    }
+
     private var discogsURL: URL? {
         detail?.discogsURL.flatMap(URL.init(string:))
             ?? URL(string: "https://www.discogs.com/release/\(item.releaseID)")
@@ -97,10 +110,8 @@ struct RecordDetailView: View {
         HStack(alignment: .top, spacing: 20) {
             CoverImageView(
                 releaseID: item.releaseID,
-                // The full-size image only arrives with the release fetch; the collection snapshot
-                // carries a mid-size cover that stands in until then.
-                remoteURL: detail?.coverURL ?? item.coverURL ?? item.thumbURL,
-                kind: .cover,
+                remoteURL: coverSource.url,
+                kind: coverSource.kind,
                 edge: 240
             )
             .frame(width: 240, height: 240)

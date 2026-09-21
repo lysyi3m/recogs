@@ -41,7 +41,11 @@ struct CoverImageView: View {
                     }
             }
         }
-        .task(id: TaskKey(releaseID: releaseID, edge: bucketedEdge)) { await load() }
+        // The URL is part of the identity: a record detail starts with the collection's cover and
+        // switches to the release's own once that arrives, and the load has to follow it.
+        .task(id: TaskKey(releaseID: releaseID, kind: kind, url: remoteURL, edge: bucketedEdge)) {
+            await load()
+        }
     }
 
     /// Rounding the requested size to a step stops a drag of the density slider from kicking off a
@@ -52,6 +56,8 @@ struct CoverImageView: View {
 
     private struct TaskKey: Hashable {
         let releaseID: Int
+        let kind: ImageCache.Kind
+        let url: String?
         let edge: CGFloat
     }
 

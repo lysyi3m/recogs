@@ -75,6 +75,11 @@ actor ImageCache {
     }
 
     /// Returns the local file for a release's art, downloading it once if it is not cached yet.
+    ///
+    /// Keyed by release and kind, deliberately not by URL. Discogs serves the same artwork under
+    /// several resized URLs — `basic_information.cover_image` is a 600px fit, the release's own
+    /// primary image a smaller one — all derived from one source file. Re-fetching because the URL
+    /// changed would spend a request to replace an image with the same picture, sometimes smaller.
     @discardableResult
     func localURL(releaseID: Int, kind: Kind, remoteURL: URL) async throws -> URL {
         let destination = fileURL(releaseID: releaseID, kind: kind)

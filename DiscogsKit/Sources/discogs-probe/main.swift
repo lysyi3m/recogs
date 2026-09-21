@@ -132,6 +132,7 @@ do {
             print("       label: \(label.name)\(label.catno.map { " — \($0)" } ?? "")")
         }
         print("       thumb: \(item.basicInformation.thumb ?? "none")")
+        print("       cover: \(item.basicInformation.coverImage ?? "none")")
     }
 
     if pagination.pages > 1 {
