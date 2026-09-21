@@ -44,21 +44,34 @@ final class CollectionEditor {
             return false
         }
 
+        // Only a failure of the POST itself means the copy was not added. Anything that goes
+        // wrong afterwards happens with the copy already on Discogs, and rolling the row back
+        // there would hide a record the user really does own.
+        let addition: CollectionAddition
         do {
             let username = try await services.username()
-            let addition = try await client.addToCollection(
+            addition = try await client.addToCollection(
                 user: username,
                 folderID: folderID,
                 releaseID: result.id
             )
-            try await services.store.reassignInstanceID(from: provisionalID, to: addition.instanceID)
-            await refine(releaseID: result.id, instanceID: addition.instanceID, client: client)
-            return true
         } catch {
             errorMessage = error.localizedDescription
             try? await services.store.deleteItem(instanceID: provisionalID)
             return false
         }
+
+        do {
+            try await services.store.reassignInstanceID(from: provisionalID, to: addition.instanceID)
+        } catch {
+            // The copy exists upstream but this device could not record its id. A refresh
+            // reconciles by instance_id, replacing the provisional row with the real one.
+            await services.syncController.sync()
+            return true
+        }
+
+        await refine(releaseID: result.id, instanceID: addition.instanceID, client: client)
+        return true
     }
 
     /// Removes a copy from the collection, optimistically.

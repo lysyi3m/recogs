@@ -161,7 +161,9 @@ public struct DiscogsClient: Sendable {
     ) async throws -> CollectionAddition {
         try await perform(
             method: "POST",
-            path: "/users/\(escape(user))/collection/folders/\(folderID)/releases/\(releaseID)"
+            path: "/users/\(escape(user))/collection/folders/\(folderID)/releases/\(releaseID)",
+            // Adding a copy is not idempotent: a retry would add a second one.
+            isIdempotent: false
         )
     }
 
@@ -177,7 +179,9 @@ public struct DiscogsClient: Sendable {
     ) async throws {
         try await performIgnoringResponse(
             method: "DELETE",
-            path: "/users/\(escape(user))/collection/folders/\(folderID)/releases/\(releaseID)/instances/\(instanceID)"
+            path: "/users/\(escape(user))/collection/folders/\(folderID)/releases/\(releaseID)/instances/\(instanceID)",
+            // Removing a specific instance twice is harmless: the second call finds nothing.
+            isIdempotent: true
         )
     }
 
@@ -193,10 +197,11 @@ public struct DiscogsClient: Sendable {
     private func perform<Response: Decodable>(
         method: String,
         path: String,
-        query: [URLQueryItem] = []
+        query: [URLQueryItem] = [],
+        isIdempotent: Bool = true
     ) async throws -> Response {
         let request = try makeRequest(method: method, path: path, query: query)
-        let data = try await send(request)
+        let data = try await send(request, isIdempotent: isIdempotent)
         do {
             return try decoder.decode(Response.self, from: data)
         } catch {
@@ -208,9 +213,13 @@ public struct DiscogsClient: Sendable {
     private func performIgnoringResponse(
         method: String,
         path: String,
-        query: [URLQueryItem] = []
+        query: [URLQueryItem] = [],
+        isIdempotent: Bool = true
     ) async throws {
-        _ = try await send(try makeRequest(method: method, path: path, query: query))
+        _ = try await send(
+            try makeRequest(method: method, path: path, query: query),
+            isIdempotent: isIdempotent
+        )
     }
 
     private func makeRequest(method: String, path: String, query: [URLQueryItem]) throws -> URLRequest {
@@ -231,8 +240,12 @@ public struct DiscogsClient: Sendable {
         return request
     }
 
-    /// Sends a request through the throttle, retrying 429 and 5xx with backoff.
-    private func send(_ request: URLRequest) async throws -> Data {
+    /// Sends a request through the throttle, retrying with backoff where that is safe.
+    ///
+    /// A `429` is always safe to retry: the request was refused, not performed. A `5xx` is not,
+    /// unless the request is idempotent — the server may have applied it and failed afterwards,
+    /// and repeating an add would create a second copy.
+    private func send(_ request: URLRequest, isIdempotent: Bool) async throws -> Data {
         var attempt = 0
         while true {
             try await rateLimiter.waitForSlot()
@@ -265,7 +278,7 @@ public struct DiscogsClient: Sendable {
                 attempt += 1
 
             case 500...599:
-                guard attempt < configuration.maxRetries else {
+                guard isIdempotent, attempt < configuration.maxRetries else {
                     throw DiscogsError.http(status: http.statusCode, message: message(from: data))
                 }
                 try await rateLimiter.backOff(attempt: attempt)
