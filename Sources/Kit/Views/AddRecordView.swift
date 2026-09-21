@@ -49,6 +49,12 @@ struct AddRecordView: View {
                 }
             }
         }
+        // A macOS sheet sizes itself to its content, and a List inside a VStack reports no height
+        // of its own. Without an explicit size the results area collapses to nothing and the sheet
+        // renders as a search field over blank space.
+        #if os(macOS)
+        .frame(minWidth: 560, idealWidth: 680, minHeight: 480, idealHeight: 620)
+        #endif
         .task { editor = editor ?? services.makeEditor() }
         .alert(
             "Add this pressing?",
