@@ -63,8 +63,12 @@ private struct CoverCell: View {
     let edge: CGFloat
     let showsCaption: Bool
 
+    @State private var isHovered = false
+
+    private var cornerRadius: CGFloat { edge < 100 ? 3 : 5 }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 7) {
             CoverImageView(
                 releaseID: item.releaseID,
                 remoteURL: item.thumbURL,
@@ -72,21 +76,31 @@ private struct CoverCell: View {
                 edge: edge
             )
             .frame(width: edge, height: edge)
-            .clipShape(.rect(cornerRadius: edge < 100 ? 3 : 6))
+            .clipShape(.rect(cornerRadius: cornerRadius))
+            // A sleeve with a pale background has no edge of its own and dissolves into the page.
+            // The hairline gives every cover the same silhouette, whatever the art does.
+            .overlay {
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .strokeBorder(.primary.opacity(0.12), lineWidth: 0.5)
+            }
+            .shadow(color: .black.opacity(isHovered ? 0.22 : 0.10), radius: isHovered ? 8 : 3, y: isHovered ? 4 : 1)
+            .scaleEffect(isHovered ? 1.025 : 1)
 
             if showsCaption {
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: 0) {
                     Text(item.title)
-                        .font(.caption)
+                        .font(.caption.weight(.medium))
                         .lineLimit(1)
                     Text(item.artistName)
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.tertiary)
                         .lineLimit(1)
                 }
                 .frame(width: edge, alignment: .leading)
             }
         }
+        .animation(.easeOut(duration: 0.14), value: isHovered)
+        .onHover { isHovered = $0 }
         .help("\(item.artistName) — \(item.title)")
     }
 }
