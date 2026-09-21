@@ -15,6 +15,7 @@ public struct ContentView: View {
     @State private var selection: CachedCollectionItem?
     @State private var isAdding = false
     @State private var searchQuery = ""
+    @FocusState private var isSearchFocused: Bool
     @State private var editor: CollectionEditor?
     @State private var pendingRemoval: CachedCollectionItem?
     #if os(iOS)
@@ -52,6 +53,7 @@ public struct ContentView: View {
                     placement: .toolbar,
                     prompt: "Find in Collection"
                 )
+                .searchFocused($isSearchFocused)
                 .navigationDestination(item: $selection) { item in
                     RecordDetailView(item: item)
                 }
@@ -74,6 +76,16 @@ public struct ContentView: View {
         #endif
         // Outside the stack, so the status stays visible on the record detail too.
         .safeAreaInset(edge: .bottom) { statusBar }
+        // Menu commands act here, where the state they drive lives.
+        .onChange(of: services.commands.addRequests) {
+            if services.hasToken { isAdding = true }
+        }
+        .onChange(of: services.commands.syncRequests) {
+            if services.hasToken { Task { await syncController.sync() } }
+        }
+        .onChange(of: services.commands.findRequests) {
+            if services.hasToken { isSearchFocused = true }
+        }
         .task {
             if editor == nil { editor = services.makeEditor() }
             // On-launch delta, skipped when a sync ran moments ago.

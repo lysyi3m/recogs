@@ -62,12 +62,26 @@ struct RecogsApp: App {
         }
         .defaultSize(width: 1100, height: 760)
         .commands {
-            // ⌘, is wired by the Settings scene below.
-
-            // Nothing here creates a document, and with a single `Window` scene the New Window
-            // item only re-focuses the window that is already open.
-            CommandGroup(replacing: .newItem) {}
+            // ⌘, is wired by the Settings scene below. With a single `Window` scene the New Window
+            // item only re-focuses the window that is already open, so ⌘N is free for adding a
+            // record — the conventional meaning of New.
+            CommandGroup(replacing: .newItem) {
+                if case .ready(let services) = startup {
+                    Button("Add Record…") { services.commands.requestAdd() }
+                        .keyboardShortcut("n", modifiers: .command)
+                }
+            }
             CommandGroup(replacing: .singleWindowList) {}
+
+            CommandMenu("Collection") {
+                if case .ready(let services) = startup {
+                    Button("Sync Now") { services.commands.requestSync() }
+                        .keyboardShortcut("r", modifiers: .command)
+                    Divider()
+                    Button("Find in Collection") { services.commands.requestFind() }
+                        .keyboardShortcut("f", modifiers: .command)
+                }
+            }
         }
         Settings {
             if case .ready(let services) = startup {

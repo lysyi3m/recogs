@@ -13,6 +13,9 @@ public final class AppServices {
     public let modelContainer: ModelContainer
     let store: CollectionStore
     let imageCache: ImageCache
+    /// Menu commands, routed to whichever view owns the matching state.
+    public let commands = AppCommands()
+
     private let tokenStore: TokenStore
 
     /// Non-nil once a token is available. First-run setup sets it; until then the app is in its
