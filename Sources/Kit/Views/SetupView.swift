@@ -24,65 +24,70 @@ struct SetupView: View {
     private static let tokenSettingsURL = URL(string: "https://www.discogs.com/settings/developers")!
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 20) {
+        VStack(spacing: 28) {
+            VStack(spacing: 10) {
                 Image(systemName: "record.circle")
-                    .font(.system(size: 52))
+                    .font(.system(size: 56, weight: .light))
                     .foregroundStyle(.secondary)
+                Text("Welcome to Recogs")
+                    .font(.title.weight(.semibold))
+                Text("Your Discogs collection, on this device.")
+                    .foregroundStyle(.secondary)
+            }
 
-                VStack(spacing: 6) {
-                    Text("Welcome to Recogs")
-                        .font(.title.weight(.semibold))
-                    Text("Your Discogs collection, on this device.")
-                        .foregroundStyle(.secondary)
-                }
+            VStack(spacing: 10) {
+                SecureField("Personal Access Token", text: $token)
+                    .textFieldStyle(.roundedBorder)
+                    .controlSize(.large)
+                    .disabled(isValidating)
+                    .onSubmit(validate)
+                    #if os(iOS)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .submitLabel(.go)
+                    #endif
 
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Paste a Personal Access Token to connect. It is stored in the Keychain on this device and never sent anywhere but Discogs.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Link(destination: Self.tokenSettingsURL) {
-                        Label("Generate a token on Discogs", systemImage: "arrow.up.right.square")
-                            .font(.callout)
-                    }
-                }
-
-                VStack(spacing: 10) {
-                    SecureField("Personal Access Token", text: $token)
-                        .textFieldStyle(.roundedBorder)
-                        .onSubmit { validate() }
-                        #if os(iOS)
-                        .autocorrectionDisabled()
-                        .textInputAutocapitalization(.never)
-                        #endif
-
-                    Button {
-                        validate()
-                    } label: {
+                Button(action: validate) {
+                    // A fixed-height label keeps the button from resizing when the spinner
+                    // replaces the text.
+                    ZStack {
+                        Text("Connect").opacity(isValidating ? 0 : 1)
                         if isValidating {
                             ProgressView().controlSize(.small)
-                        } else {
-                            Text("Connect")
                         }
                     }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(trimmedToken.isEmpty || isValidating)
+                    .frame(maxWidth: .infinity)
                 }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(trimmedToken.isEmpty || isValidating)
 
                 if case .failed(let message) = state {
-                    Label(message, systemImage: "exclamationmark.triangle.fill")
+                    Text(message)
                         .font(.callout)
                         .foregroundStyle(.red)
-                        .multilineTextAlignment(.leading)
+                        .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
+                        .transition(.opacity)
                 }
             }
-            .frame(maxWidth: 420)
-            .frame(maxWidth: .infinity)
-            .padding(28)
+
+            VStack(spacing: 6) {
+                Link(destination: Self.tokenSettingsURL) {
+                    Text("Generate a token on Discogs")
+                }
+                Text("Stored in the Keychain on this device, and never sent anywhere but Discogs.")
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .font(.callout)
         }
+        .frame(maxWidth: 320)
+        // Centred in whatever space the window gives it, rather than pinned to the top.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(32)
+        .animation(.default, value: state)
     }
 
     private var trimmedToken: String {
