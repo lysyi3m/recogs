@@ -60,6 +60,10 @@ public struct ContentView: View {
                 }
                 #endif
         }
+        #if os(macOS)
+        .toolbarBackground(Color(nsColor: .windowBackgroundColor), for: .windowToolbar)
+        .toolbarBackground(.visible, for: .windowToolbar)
+        #endif
         // Outside the stack, so the status stays visible on the record detail too.
         .safeAreaInset(edge: .bottom) { statusBar }
         .task {
