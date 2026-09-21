@@ -47,23 +47,56 @@ final class SyncController {
         await performSync()
     }
 
+    enum ResetError: LocalizedError {
+        case noToken
+        case unreachable(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .noToken:
+                return "No Discogs token."
+            case .unreachable(let reason):
+                return "Nothing was deleted: \(reason)"
+            }
+        }
+    }
+
     /// Clears the cache and rebuilds it.
+    ///
+    /// Discogs is checked first, because the cache is the only copy of the collection this device
+    /// has. Clearing it and then failing to download would leave nothing to browse — exactly when
+    /// the user is offline and the cache matters most.
     ///
     /// `isSyncing` covers the whole operation, including the gap between the cache emptying and
     /// the download starting — otherwise the grid flashes its empty state in that window.
     func resetAndResync() async throws {
         guard !isSyncing else { return }
+        guard let client = services.client else { throw ResetError.noToken }
+
         isSyncing = true
-        activity = "Clearing cache…"
+        activity = "Checking connection…"
         defer {
             isSyncing = false
             activity = nil
             progress = nil
         }
 
+        do {
+            _ = try await client.identity()
+        } catch {
+            let reason = (error as? DiscogsError)?.localizedDescription ?? error.localizedDescription
+            throw ResetError.unreachable(reason)
+        }
+
+        activity = "Clearing cache…"
         try await services.resetCache()
         activity = "Downloading collection…"
+        // A failure here leaves an empty cache, so it is reported even when the cause is simply
+        // being offline.
         await performSync()
+        // On the collection screen being offline is a status line, not a failure: the cache is
+        // intact and still browsable.
+        if isOffline { errorMessage = nil }
     }
 
     private func performSync() async {
@@ -80,10 +113,10 @@ final class SyncController {
         } catch is CancellationError {
             // The view went away; not a failure worth surfacing.
         } catch {
-            let discogsError = error as? DiscogsError
-            isOffline = discogsError?.isOffline ?? false
-            // Offline is reported as a status line, not an error banner: the cache still works.
-            errorMessage = isOffline ? nil : error.localizedDescription
+            isOffline = (error as? DiscogsError)?.isOffline ?? false
+            // Always recorded here. Callers for which being offline is merely a status clear it;
+            // callers that have already destroyed something must not.
+            errorMessage = error.localizedDescription
         }
     }
 }

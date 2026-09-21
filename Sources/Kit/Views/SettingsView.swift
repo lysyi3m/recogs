@@ -143,7 +143,15 @@ struct CollectionSettingsView: View {
     private func syncNow() async {
         message = nil
         await syncController.sync()
-        message = syncController.errorMessage ?? "Sync finished"
+        // `sync` clears the error when the cause is simply being offline, so that case has to be
+        // reported here rather than passed off as success.
+        if let errorMessage = syncController.errorMessage {
+            message = errorMessage
+        } else if syncController.isOffline {
+            message = "Offline — nothing synced"
+        } else {
+            message = "Sync finished"
+        }
         await refreshSummary()
     }
 
