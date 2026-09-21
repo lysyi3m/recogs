@@ -21,6 +21,13 @@ public final class AppServices {
 
     var hasToken: Bool { client != nil }
 
+    /// The Discogs username this token belongs to, for display. Resolved at sign-in and remembered.
+    private(set) var accountUsername: String?
+
+    /// The stored token with its middle replaced, so Settings can show *which* token is in use
+    /// without putting the secret on screen. The full value never leaves the Keychain.
+    private(set) var maskedToken: String?
+
     /// Remembered so collection writes do not spend a request on `/oauth/identity` every time.
     @ObservationIgnored private var cachedUsername: String?
     private static let usernameKey = "discogsUsername"
@@ -40,6 +47,7 @@ public final class AppServices {
 
     private func rememberUsername(_ username: String) {
         cachedUsername = username
+        accountUsername = username
         UserDefaults.standard.set(username, forKey: Self.usernameKey)
     }
 
@@ -58,7 +66,16 @@ public final class AppServices {
         self.tokenStore = tokenStore
         self.imageCache = imageCache
         self.store = CollectionStore(modelContainer: modelContainer)
-        self.client = (try? tokenStore.read()).flatMap { $0 }.map(Self.makeClient)
+        let storedToken = (try? tokenStore.read()).flatMap { $0 }
+        self.client = storedToken.map(Self.makeClient)
+        self.maskedToken = storedToken.map(Self.mask)
+        self.accountUsername = UserDefaults.standard.string(forKey: Self.usernameKey)
+    }
+
+    /// Keeps the first and last few characters, which is enough to tell two tokens apart.
+    nonisolated static func mask(_ token: String) -> String {
+        guard token.count > 12 else { return String(repeating: "•", count: max(token.count, 8)) }
+        return "\(token.prefix(4))\(String(repeating: "•", count: 12))\(token.suffix(4))"
     }
 
     nonisolated public static func makeModelContainer(inMemory: Bool = false) throws -> ModelContainer {
@@ -75,19 +92,43 @@ public final class AppServices {
         let identity = try await candidate.identity()
         try tokenStore.save(token)
         client = candidate
+        maskedToken = Self.mask(token)
         rememberUsername(identity.username)
         return identity
     }
 
-    func signOut() throws {
+    /// Empties the local cache without touching the token, so the next sync rebuilds from scratch.
+    func resetCache() async throws {
+        try await store.removeAll()
+        try await imageCache.removeAll()
+    }
+
+    /// Disconnects the account and leaves the app as it was before first run: no token, no cached
+    /// collection, no cover art.
+    func signOut() async throws {
+        try await resetCache()
         try tokenStore.delete()
         client = nil
         cachedUsername = nil
+        accountUsername = nil
+        maskedToken = nil
         UserDefaults.standard.removeObject(forKey: Self.usernameKey)
+        UserDefaults.standard.removeObject(forKey: "lastSyncedAt")
     }
 
     func makeEditor() -> CollectionEditor {
         CollectionEditor(services: self)
+    }
+
+    /// The one sync controller for the app. Views must share it, or a sync started in Settings
+    /// looks like "not syncing" to the collection screen, which then shows its empty state.
+    @ObservationIgnored private var storedSyncController: SyncController?
+
+    var syncController: SyncController {
+        if let storedSyncController { return storedSyncController }
+        let controller = SyncController(services: self)
+        storedSyncController = controller
+        return controller
     }
 
     func makeSyncer() -> CollectionSyncer? {

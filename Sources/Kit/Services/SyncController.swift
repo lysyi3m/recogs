@@ -16,8 +16,10 @@ final class SyncController {
     /// status rather than a failure.
     private(set) var isOffline = false
     private(set) var lastSyncedAt: Date?
+    /// What the current operation is doing, for a progress label. Nil when idle.
+    private(set) var activity: String?
 
-    private let services: AppServices
+    private unowned let services: AppServices
     private static let lastSyncedKey = "lastSyncedAt"
 
     init(services: AppServices) {
@@ -34,14 +36,39 @@ final class SyncController {
 
     /// Runs a full refresh. Concurrent calls are ignored, so pull-to-refresh cannot stack syncs.
     func sync() async {
-        guard !isSyncing, let syncer = services.makeSyncer() else { return }
-
+        guard !isSyncing else { return }
         isSyncing = true
-        errorMessage = nil
+        activity = "Syncing…"
         defer {
             isSyncing = false
+            activity = nil
             progress = nil
         }
+        await performSync()
+    }
+
+    /// Clears the cache and rebuilds it.
+    ///
+    /// `isSyncing` covers the whole operation, including the gap between the cache emptying and
+    /// the download starting — otherwise the grid flashes its empty state in that window.
+    func resetAndResync() async throws {
+        guard !isSyncing else { return }
+        isSyncing = true
+        activity = "Clearing cache…"
+        defer {
+            isSyncing = false
+            activity = nil
+            progress = nil
+        }
+
+        try await services.resetCache()
+        activity = "Downloading collection…"
+        await performSync()
+    }
+
+    private func performSync() async {
+        guard let syncer = services.makeSyncer() else { return }
+        errorMessage = nil
 
         do {
             lastSummary = try await syncer.sync { update in

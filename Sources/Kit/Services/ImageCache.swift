@@ -101,21 +101,30 @@ actor ImageCache {
         return image
     }
 
-    /// Total bytes on disk. Used by diagnostics, not by any eviction policy — there is none.
-    func diskUsage() -> Int {
+    struct Statistics: Sendable, Hashable {
+        var fileCount: Int
+        var byteCount: Int
+    }
+
+    /// What is on disk. Used by diagnostics, not by any eviction policy — there is none.
+    func statistics() -> Statistics {
         guard let enumerator = FileManager.default.enumerator(
             at: directory,
-            includingPropertiesForKeys: [.fileSizeKey],
+            includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey],
             options: [.skipsHiddenFiles]
-        ) else { return 0 }
+        ) else { return Statistics(fileCount: 0, byteCount: 0) }
 
-        var total = 0
+        var statistics = Statistics(fileCount: 0, byteCount: 0)
         for case let url as URL in enumerator {
-            let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize
-            total += size ?? 0
+            let values = try? url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
+            guard values?.isRegularFile == true else { continue }
+            statistics.fileCount += 1
+            statistics.byteCount += values?.fileSize ?? 0
         }
-        return total
+        return statistics
     }
+
+    func diskUsage() -> Int { statistics().byteCount }
 
     func removeAll() throws {
         guard FileManager.default.fileExists(atPath: directory.path) else { return }

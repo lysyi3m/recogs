@@ -62,10 +62,23 @@ struct RecogsApp: App {
         }
         .defaultSize(width: 1100, height: 760)
         .commands {
+            // ⌘, is wired by the Settings scene below.
+
             // Nothing here creates a document, and with a single `Window` scene the New Window
             // item only re-focuses the window that is already open.
             CommandGroup(replacing: .newItem) {}
             CommandGroup(replacing: .singleWindowList) {}
+        }
+        Settings {
+            if case .ready(let services) = startup {
+                SettingsView {
+                    // Signing out returns the app to onboarding; the Settings window has nothing
+                    // left to show.
+                    NSApp.keyWindow?.close()
+                }
+                .environment(services)
+                .modelContainer(services.modelContainer)
+            }
         }
         #else
         WindowGroup {

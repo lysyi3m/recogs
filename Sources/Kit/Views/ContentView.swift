@@ -4,17 +4,22 @@ import SwiftUI
 
 public struct ContentView: View {
     @Environment(AppServices.self) private var services
+
+    private var syncController: SyncController { services.syncController }
     @Query private var allItems: [CachedCollectionItem]
 
     @AppStorage("collectionSort") private var sortRaw = CollectionSortOption.default.rawValue
     @AppStorage("collectionSortDirection") private var directionRaw = CollectionSortOption.defaultOrder.rawValue
     @AppStorage("collectionItemWidth") private var itemWidth = 120.0
 
-    @State private var syncController: SyncController?
     @State private var selection: CachedCollectionItem?
     @State private var isAdding = false
     @State private var editor: CollectionEditor?
     @State private var pendingRemoval: CachedCollectionItem?
+    #if os(iOS)
+    // iOS has no Settings scene, so it gets a toolbar button and a sheet instead.
+    @State private var isShowingSettings = false
+    #endif
 
     public init() {}
 
@@ -29,6 +34,9 @@ public struct ContentView: View {
     public var body: some View {
         NavigationStack {
             content
+                // Without this the empty and loading states size to their own content, and the
+                // bottom bar rides up with them instead of staying at the window edge.
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 // First run has no collection to title, and "Collection" above "Welcome to
                 // Recogs" reads as a stray label.
                 .navigationTitle(services.hasToken ? "Collection" : "")
@@ -44,15 +52,20 @@ public struct ContentView: View {
                         .environment(services)
                         .modelContainer(services.modelContainer)
                 }
+                #if os(iOS)
+                .sheet(isPresented: $isShowingSettings) {
+                    SettingsView { isShowingSettings = false }
+                        .environment(services)
+                        .modelContainer(services.modelContainer)
+                }
+                #endif
         }
         // Outside the stack, so the status stays visible on the record detail too.
         .safeAreaInset(edge: .bottom) { statusBar }
         .task {
-            let controller = syncController ?? SyncController(services: services)
-            syncController = controller
             if editor == nil { editor = services.makeEditor() }
             // On-launch delta, skipped when a sync ran moments ago.
-            if controller.shouldSyncOnLaunch { await controller.sync() }
+            if syncController.shouldSyncOnLaunch { await syncController.sync() }
         }
         .confirmationDialog(
             "Remove this copy?",
@@ -75,23 +88,22 @@ public struct ContentView: View {
     @ViewBuilder
     private var content: some View {
         if !services.hasToken {
-            SetupView { Task { await syncController?.sync() } }
-        } else if allItems.isEmpty, syncController?.isSyncing == true {
+            SetupView { Task { await syncController.sync() } }
+        } else if allItems.isEmpty, syncController.isSyncing {
             // First sync on a fresh install: an empty grid with a spinner beats an empty-state
             // screen that is about to be wrong.
             VStack(spacing: 12) {
                 ProgressView()
                 Text(initialSyncStatus).font(.callout).foregroundStyle(.secondary)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if allItems.isEmpty {
             ContentUnavailableView {
                 Label("No Records Yet", systemImage: "square.stack")
             } description: {
                 Text("Sync to pull your Discogs collection onto this device.")
             } actions: {
-                Button("Sync Now") { Task { await syncController?.sync() } }
-                    .disabled(syncController?.isSyncing ?? true)
+                Button("Sync Now") { Task { await syncController.sync() } }
+                    .disabled(syncController.isSyncing)
                 Button("Add a Record") { isAdding = true }
             }
         } else {
@@ -102,7 +114,7 @@ public struct ContentView: View {
                 onSelect: { selection = $0 },
                 onRequestRemove: { pendingRemoval = $0 }
             )
-            .refreshable { await syncController?.sync() }
+            .refreshable { await syncController.sync() }
         }
     }
 
@@ -112,8 +124,24 @@ public struct ContentView: View {
             addButton
             sortMenu
             refreshButton
+            #if os(iOS)
+            settingsButton
+            #endif
         }
     }
+
+    #if os(iOS)
+    @ToolbarContentBuilder
+    private var settingsButton: some ToolbarContent {
+        ToolbarItem {
+            Button {
+                isShowingSettings = true
+            } label: {
+                Label("Settings", systemImage: "gearshape")
+            }
+        }
+    }
+    #endif
 
     @ToolbarContentBuilder
     private var addButton: some ToolbarContent {
@@ -151,16 +179,16 @@ public struct ContentView: View {
     private var refreshButton: some ToolbarContent {
         ToolbarItem {
             Button {
-                Task { await syncController?.sync() }
+                Task { await syncController.sync() }
             } label: {
                 Label("Refresh", systemImage: "arrow.clockwise")
             }
-            .disabled(syncController?.isSyncing ?? true)
+            .disabled(syncController.isSyncing)
         }
     }
 
     private var initialSyncStatus: String {
-        guard let progress = syncController?.progress else { return "Fetching your collection…" }
+        guard let progress = syncController.progress else { return "Fetching your collection…" }
         return "\(progress.itemsFetched) of \(progress.totalItems) records"
     }
 
@@ -212,33 +240,33 @@ public struct ContentView: View {
     /// Always says something: a sync in flight, a problem, or when it last worked.
     @ViewBuilder
     private var syncStatus: some View {
-        if let progress = syncController?.progress {
+        if let progress = syncController.progress {
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
                 Text("Syncing \(progress.itemsFetched) of \(progress.totalItems)")
             }
             .font(.caption.monospacedDigit())
             .foregroundStyle(.secondary)
-        } else if syncController?.isSyncing == true {
+        } else if syncController.isSyncing {
             HStack(spacing: 6) {
                 ProgressView().controlSize(.small)
                 Text("Syncing…")
             }
             .font(.caption)
             .foregroundStyle(.secondary)
-        } else if let errorMessage = editor?.errorMessage ?? syncController?.errorMessage {
+        } else if let errorMessage = editor?.errorMessage ?? syncController.errorMessage {
             Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
                 .font(.caption)
                 .foregroundStyle(.red)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .help(errorMessage)
-        } else if syncController?.isOffline == true {
+        } else if syncController.isOffline {
             Label("Offline — showing cached collection", systemImage: "wifi.slash")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
-        } else if let lastSyncedAt = syncController?.lastSyncedAt {
+        } else if let lastSyncedAt = syncController.lastSyncedAt {
             Text("Synced \(lastSyncedAt.formatted(.relative(presentation: .named)))")
                 .font(.caption)
                 .foregroundStyle(.secondary)
