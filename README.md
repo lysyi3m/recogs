@@ -21,8 +21,8 @@ rejects them.
 
 ## Requirements
 
-- macOS 14 (Sonoma) or iOS 17, or later
-- Xcode 16 or later, to build
+- macOS 26 or iOS 26, or later
+- Xcode 26 or later, to build
 - A Discogs account, to use
 
 ## Build & run
@@ -45,10 +45,6 @@ On first launch, paste a [Personal Access Token](https://www.discogs.com/setting
 It is validated against `/oauth/identity`, stored in the Keychain on that
 device, and never written to logs or `UserDefaults`.
 
-For exercising `DiscogsKit` outside the app, put the same token in `.env` as
-`DISCOGS_PAT` and run `make probe`. That path is for local development only and
-is never a fallback in the app.
-
 ## How it works
 
 Discogs is the source of truth; the local store is a cache. A refresh pages the
@@ -70,7 +66,7 @@ cached on disk permanently and never re-fetched.
 
 | Path | Purpose |
 | --- | --- |
-| `DiscogsKit/` | Swift package: API client, typed models, header-aware rate limiter, and the `discogs-probe` CLI |
+| `DiscogsKit/` | Swift package: API client, typed models, and header-aware rate limiter |
 | `Sources/Kit/` | `RecogsKit` — SwiftData cache, image cache, services, and the SwiftUI feature layer |
 | `Sources/App/` | The app target: `@main` and assets |
 | `Tests/` | `RecogsKit` unit tests (`@testable import RecogsKit`) |

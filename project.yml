@@ -8,8 +8,8 @@ options:
   createIntermediateGroups: true
   developmentLanguage: en
   deploymentTarget:
-    macOS: "14.0"
-    iOS: "17.0"
+    macOS: "26.0"
+    iOS: "26.0"
 
 configFiles:
   Debug: Config/Base.xcconfig

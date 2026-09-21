@@ -3,8 +3,7 @@ import Security
 
 /// Keychain-backed storage for the Discogs Personal Access Token.
 ///
-/// The token never reaches UserDefaults, a file, or a log line. `TokenStore` deliberately has no
-/// environment-variable fallback: the `.env` path exists only for the `discogs-probe` dev tool.
+/// The token never reaches UserDefaults, a file, an environment variable, or a log line.
 struct TokenStore: Sendable {
     enum StoreError: Error, LocalizedError {
         case keychain(OSStatus)
