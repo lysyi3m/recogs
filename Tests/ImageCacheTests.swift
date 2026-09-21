@@ -9,6 +9,7 @@ struct ImageCacheTests {
     final class CountingProtocol: URLProtocol, @unchecked Sendable {
         nonisolated(unsafe) static var requestCounts: [String: Int] = [:]
         nonisolated(unsafe) static var statusCode = 200
+        nonisolated(unsafe) static var bodyOverride: Data?
         private static let lock = NSLock()
 
         static let pngBytes = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")!
@@ -17,6 +18,16 @@ struct ImageCacheTests {
             lock.withLock {
                 requestCounts = [:]
                 statusCode = 200
+                bodyOverride = nil
+            }
+        }
+
+        /// Serve something other than a valid PNG, with a 200.
+        static func serve(body: Data) {
+            lock.withLock {
+                requestCounts = [:]
+                statusCode = 200
+                bodyOverride = body
             }
         }
 
@@ -29,15 +40,15 @@ struct ImageCacheTests {
 
         override func startLoading() {
             let key = request.url?.absoluteString ?? ""
-            let status = Self.lock.withLock {
+            let (status, body) = Self.lock.withLock { () -> (Int, Data) in
                 Self.requestCounts[key, default: 0] += 1
-                return Self.statusCode
+                return (Self.statusCode, Self.bodyOverride ?? Self.pngBytes)
             }
             let response = HTTPURLResponse(
                 url: request.url!, statusCode: status, httpVersion: "HTTP/1.1", headerFields: nil
             )!
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            if status == 200 { client?.urlProtocol(self, didLoad: Self.pngBytes) }
+            if status == 200 { client?.urlProtocol(self, didLoad: body) }
             client?.urlProtocolDidFinishLoading(self)
         }
 
@@ -122,6 +133,80 @@ struct ImageCacheTests {
             try await cache.localURL(releaseID: 9, kind: .thumb, remoteURL: remote)
         }
         #expect(await cache.isCached(releaseID: 9, kind: .thumb) == false)
+    }
+
+    @Test("A 200 carrying an HTML error page is not cached as an image")
+    func rejectsHTMLServedWith200() async throws {
+        CountingProtocol.serve(body: Data("<html><body>Not Found</body></html>".utf8))
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let cache = makeCache(directory: directory)
+        let remote = URL(string: "https://i.discogs.com/html-error.jpeg")!
+
+        await #expect(throws: (any Error).self) {
+            try await cache.localURL(releaseID: 11, kind: .thumb, remoteURL: remote)
+        }
+        #expect(await cache.isCached(releaseID: 11, kind: .thumb) == false,
+                "an HTML body must never occupy a cover slot permanently")
+    }
+
+    @Test("A 200 with an empty body is not cached")
+    func rejectsEmptyBody() async throws {
+        CountingProtocol.serve(body: Data())
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let cache = makeCache(directory: directory)
+        let remote = URL(string: "https://i.discogs.com/empty.jpeg")!
+
+        await #expect(throws: (any Error).self) {
+            try await cache.localURL(releaseID: 12, kind: .thumb, remoteURL: remote)
+        }
+        #expect(await cache.isCached(releaseID: 12, kind: .thumb) == false)
+    }
+
+    @Test("A truncated image is rejected rather than cached half-written")
+    func rejectsTruncatedImage() async throws {
+        CountingProtocol.serve(body: CountingProtocol.pngBytes.prefix(20))
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let cache = makeCache(directory: directory)
+        let remote = URL(string: "https://i.discogs.com/truncated.jpeg")!
+
+        await #expect(throws: (any Error).self) {
+            try await cache.localURL(releaseID: 13, kind: .thumb, remoteURL: remote)
+        }
+        #expect(await cache.isCached(releaseID: 13, kind: .thumb) == false)
+    }
+
+    @Test("A cached file that will not decode is discarded, so the next attempt re-fetches")
+    func discardsUndecodableCachedFile() async throws {
+        CountingProtocol.reset()
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let cache = makeCache(directory: directory)
+        let remote = URL(string: "https://i.discogs.com/corrupt.jpeg")!
+
+        // Simulate a file cached by an earlier build that did not validate its downloads.
+        let destination = await cache.fileURL(releaseID: 14, kind: .thumb)
+        try FileManager.default.createDirectory(
+            at: destination.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+        try Data("garbage".utf8).write(to: destination)
+        #expect(await cache.isCached(releaseID: 14, kind: .thumb))
+
+        await #expect(throws: (any Error).self) {
+            try await cache.image(releaseID: 14, kind: .thumb, remoteURL: remote, maximumPixelSize: 150)
+        }
+        #expect(await cache.isCached(releaseID: 14, kind: .thumb) == false,
+                "the corrupt file must be removed, not kept forever")
+
+        // With the bad file gone the next request downloads a real image.
+        let image = try await cache.image(releaseID: 14, kind: .thumb, remoteURL: remote, maximumPixelSize: 150)
+        #expect(image.size.width > 0)
     }
 
     @Test("Cached images decode, downsampled to the requested size")

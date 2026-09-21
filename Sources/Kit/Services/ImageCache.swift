@@ -101,6 +101,9 @@ actor ImageCache {
     func image(releaseID: Int, kind: Kind, remoteURL: URL, maximumPixelSize: CGFloat) async throws -> PlatformImage {
         let url = try await localURL(releaseID: releaseID, kind: kind, remoteURL: remoteURL)
         guard let image = Self.downsample(at: url, maximumPixelSize: maximumPixelSize) else {
+            // An undecodable file is worse than none: it counts as cached forever. Drop it so the
+            // next request downloads again.
+            try? FileManager.default.removeItem(at: url)
             throw CacheError.notAnImage
         }
         return image
@@ -146,6 +149,10 @@ actor ImageCache {
         if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
             throw CacheError.badResponse(status: http.statusCode)
         }
+        // A 200 does not mean an image. CDNs answer with HTML error pages, empty bodies and
+        // truncated responses, and nothing here is ever re-fetched — so anything that is not a
+        // complete image must be rejected before it reaches the cache.
+        guard Self.isCompleteImage(data) else { throw CacheError.notAnImage }
 
         try FileManager.default.createDirectory(
             at: destination.deletingLastPathComponent(),
@@ -156,8 +163,37 @@ actor ImageCache {
         let temporary = destination.deletingLastPathComponent()
             .appending(path: UUID().uuidString, directoryHint: .notDirectory)
         try data.write(to: temporary, options: .atomic)
-        _ = try? FileManager.default.replaceItemAt(destination, withItemAt: temporary)
+        do {
+            if FileManager.default.fileExists(atPath: destination.path) {
+                _ = try FileManager.default.replaceItemAt(destination, withItemAt: temporary)
+            } else {
+                try FileManager.default.moveItem(at: temporary, to: destination)
+            }
+        } catch {
+            // Swallowing this would return a path with no file behind it and leak the temporary.
+            try? FileManager.default.removeItem(at: temporary)
+            throw error
+        }
         return destination
+    }
+
+    /// Whether `data` is an image the system can decode in full.
+    ///
+    /// The container checks are cheap early-outs: an HTML body has no image type and an empty one
+    /// has no frames. They are not sufficient on their own — a source built from a complete `Data`
+    /// reports `statusComplete` even when the pixel data is truncated — so the image is decoded
+    /// once to be sure. That cost is paid on first download only, and never re-fetching makes a
+    /// corrupt file expensive to accept.
+    nonisolated static func isCompleteImage(_ data: Data) -> Bool {
+        guard !data.isEmpty,
+              let source = CGImageSourceCreateWithData(
+                  data as CFData,
+                  [kCGImageSourceShouldCache: false] as CFDictionary
+              ),
+              CGImageSourceGetType(source) != nil,
+              CGImageSourceGetCount(source) > 0
+        else { return false }
+        return CGImageSourceCreateImageAtIndex(source, 0, nil) != nil
     }
 
     private func withConcurrencyLimit<T>(_ work: () async throws -> T) async throws -> T {
