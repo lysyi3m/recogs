@@ -61,6 +61,50 @@ final class CollectionEditor {
         }
     }
 
+    /// Removes a copy from the collection, optimistically.
+    ///
+    /// Keyed by `instanceID`: removing one of two pressings of the same album must not touch the
+    /// other. The row disappears from the grid immediately and comes back if Discogs rejects the
+    /// delete.
+    @discardableResult
+    func remove(instanceID: Int) async -> Bool {
+        guard !isWorking, let client = services.client else { return false }
+        isWorking = true
+        errorMessage = nil
+        defer { isWorking = false }
+
+        let snapshot: CollectionItemSnapshot?
+        do {
+            snapshot = try await services.store.item(instanceID: instanceID)
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+        guard let snapshot else { return false }
+
+        do {
+            try await services.store.deleteItem(instanceID: instanceID)
+        } catch {
+            errorMessage = error.localizedDescription
+            return false
+        }
+
+        do {
+            let username = try await services.username()
+            try await client.removeFromCollection(
+                user: username,
+                folderID: snapshot.folderID,
+                releaseID: snapshot.releaseID,
+                instanceID: snapshot.instanceID
+            )
+            return true
+        } catch {
+            errorMessage = error.localizedDescription
+            try? await services.store.restore(snapshot)
+            return false
+        }
+    }
+
     /// Best-effort accuracy pass. A failure here leaves the copy added with search-derived text,
     /// which the next full sync corrects anyway.
     private func refine(releaseID: Int, instanceID: Int, client: DiscogsClient) async {

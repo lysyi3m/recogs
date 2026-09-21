@@ -73,6 +73,27 @@ final class CachedCollectionItem {
         sortTitle = Self.sortKey(pending.title)
     }
 
+    /// Rebuilds a row from a snapshot, so a failed removal can be rolled back exactly.
+    init(from snapshot: CollectionItemSnapshot) {
+        instanceID = snapshot.instanceID
+        releaseID = snapshot.releaseID
+        folderID = snapshot.folderID
+        dateAdded = snapshot.dateAdded
+        rating = snapshot.rating
+        title = snapshot.title
+        artistName = snapshot.artistName
+        year = snapshot.year
+        thumbURL = snapshot.thumbURL
+        coverURL = snapshot.coverURL
+        formatSummary = snapshot.formatSummary
+        labelName = snapshot.labelName
+        catalogNumber = snapshot.catalogNumber
+        genres = snapshot.genres
+        styles = snapshot.styles
+        sortArtist = Self.sortKey(snapshot.artistName)
+        sortTitle = Self.sortKey(snapshot.title)
+    }
+
     /// Replaces the search-derived fields with the release's authoritative ones, after an add.
     func apply(_ release: Release) {
         title = release.title

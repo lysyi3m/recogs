@@ -13,6 +13,8 @@ public struct ContentView: View {
     @State private var syncController: SyncController?
     @State private var selection: CachedCollectionItem?
     @State private var isAdding = false
+    @State private var editor: CollectionEditor?
+    @State private var pendingRemoval: CachedCollectionItem?
 
     public init() {}
 
@@ -41,6 +43,23 @@ public struct ContentView: View {
         }
         .task {
             if syncController == nil { syncController = SyncController(services: services) }
+            if editor == nil { editor = services.makeEditor() }
+        }
+        .confirmationDialog(
+            "Remove this copy?",
+            isPresented: Binding(
+                get: { pendingRemoval != nil },
+                set: { if !$0 { pendingRemoval = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: pendingRemoval
+        ) { item in
+            Button("Remove from Collection", role: .destructive) {
+                Task { await editor?.remove(instanceID: item.instanceID) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { item in
+            Text("\(item.artistName) — \(item.title)\nThis removes the copy from Discogs. Other copies of the same release are unaffected.")
         }
     }
 
@@ -62,8 +81,10 @@ public struct ContentView: View {
             CollectionGridView(
                 sort: sort,
                 direction: direction,
-                itemWidth: itemWidth
-            ) { selection = $0 }
+                itemWidth: itemWidth,
+                onSelect: { selection = $0 },
+                onRequestRemove: { pendingRemoval = $0 }
+            )
         }
     }
 
@@ -130,7 +151,7 @@ public struct ContentView: View {
                         total: Double(max(progress.totalItems, 1))
                     )
                     .progressViewStyle(.linear)
-                } else if let errorMessage = syncController?.errorMessage {
+                } else if let errorMessage = editor?.errorMessage ?? syncController?.errorMessage {
                     Text(errorMessage)
                         .font(.caption)
                         .foregroundStyle(.red)

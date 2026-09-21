@@ -8,7 +8,10 @@ struct RecordDetailView: View {
     let item: CachedCollectionItem
 
     @Environment(AppServices.self) private var services
+    @Environment(\.dismiss) private var dismiss
     @State private var loader: ReleaseDetailLoader?
+    @State private var editor: CollectionEditor?
+    @State private var isConfirmingRemoval = false
 
     private var detail: ReleaseDetailSnapshot? {
         if case .loaded(let snapshot) = loader?.state { return snapshot }
@@ -31,6 +34,8 @@ struct RecordDetailView: View {
                         Label("View on Discogs", systemImage: "arrow.up.right.square")
                     }
                 }
+
+                removeSection
             }
             .frame(maxWidth: 640, alignment: .leading)
             .frame(maxWidth: .infinity)
@@ -41,9 +46,45 @@ struct RecordDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .task {
+            editor = editor ?? services.makeEditor()
             let loader = loader ?? ReleaseDetailLoader(services: services)
             self.loader = loader
             await loader.load(releaseID: item.releaseID)
+        }
+        .confirmationDialog(
+            "Remove this copy?",
+            isPresented: $isConfirmingRemoval,
+            titleVisibility: .visible
+        ) {
+            Button("Remove from Collection", role: .destructive) {
+                Task {
+                    if await editor?.remove(instanceID: item.instanceID) == true { dismiss() }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("\(item.artistName) — \(item.title)\nThis removes the copy from Discogs. Other copies of the same release are unaffected.")
+        }
+    }
+
+    @ViewBuilder
+    private var removeSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Divider()
+            if let message = editor?.errorMessage {
+                Label(message, systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout)
+                    .foregroundStyle(.red)
+            }
+            Button(role: .destructive) {
+                isConfirmingRemoval = true
+            } label: {
+                Label("Remove from Collection", systemImage: "trash")
+            }
+            .disabled(editor?.isWorking ?? true)
+            Text("Sold it, or added it by mistake.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         }
     }
 

@@ -10,18 +10,21 @@ struct CollectionGridView: View {
 
     private let itemWidth: CGFloat
     private let onSelect: (CachedCollectionItem) -> Void
+    private let onRequestRemove: (CachedCollectionItem) -> Void
 
     init(
         sort: CollectionSortOption,
         direction: SortDirection,
         itemWidth: CGFloat,
-        onSelect: @escaping (CachedCollectionItem) -> Void
+        onSelect: @escaping (CachedCollectionItem) -> Void,
+        onRequestRemove: @escaping (CachedCollectionItem) -> Void
     ) {
         var descriptor = FetchDescriptor<CachedCollectionItem>()
         descriptor.sortBy = sort.sortDescriptors(direction)
         _items = Query(descriptor)
         self.itemWidth = itemWidth
         self.onSelect = onSelect
+        self.onRequestRemove = onRequestRemove
     }
 
     var body: some View {
@@ -35,6 +38,14 @@ struct CollectionGridView: View {
                         CoverCell(item: item, edge: itemWidth, showsCaption: itemWidth >= 110)
                     }
                     .buttonStyle(.plain)
+                    // Long press on iOS, right click on macOS.
+                    .contextMenu {
+                        Button("Open") { onSelect(item) }
+                        Divider()
+                        Button("Remove from Collection…", systemImage: "trash", role: .destructive) {
+                            onRequestRemove(item)
+                        }
+                    }
                 }
             }
             .padding(spacing)

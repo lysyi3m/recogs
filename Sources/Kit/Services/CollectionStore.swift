@@ -73,6 +73,13 @@ actor CollectionStore {
         try modelContext.save()
     }
 
+    /// Puts a removed copy back, after Discogs rejected the delete.
+    func restore(_ snapshot: CollectionItemSnapshot) throws {
+        guard try cachedItem(instanceID: snapshot.instanceID) == nil else { return }
+        modelContext.insert(CachedCollectionItem(from: snapshot))
+        try modelContext.save()
+    }
+
     /// Swaps a provisional id for the one Discogs assigned.
     func reassignInstanceID(from provisional: Int, to confirmed: Int) throws {
         guard let item = try cachedItem(instanceID: provisional) else { return }
