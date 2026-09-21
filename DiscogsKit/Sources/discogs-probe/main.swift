@@ -40,6 +40,11 @@ func printRateLimit(_ label: String) async {
 
 let cdnCheckOnly = CommandLine.arguments.contains("--cdn-check")
 let releaseOnly = CommandLine.arguments.contains("--release")
+let searchQuery: String? = {
+    guard let index = CommandLine.arguments.firstIndex(of: "--search") else { return nil }
+    let next = CommandLine.arguments.index(after: index)
+    return next < CommandLine.arguments.endIndex ? CommandLine.arguments[next] : "remain in light"
+}()
 
 do {
     print("User-Agent: \(configuration.userAgent)")
@@ -48,6 +53,20 @@ do {
     print("  username: \(identity.username)")
     print("  user id:  \(identity.id)")
     await printRateLimit("identity")
+
+    if let searchQuery {
+        print("\n== GET /database/search?type=release&q=\(searchQuery) ==")
+        let page = try await client.searchReleases(query: searchQuery, perPage: 8)
+        print("  \(page.pagination.items) match(es), showing \(page.results.count)")
+        for result in page.results {
+            let year = result.year.map(String.init) ?? "----"
+            print("  [\(result.id)] \(result.artistName ?? "?") — \(result.releaseTitle) (\(year))")
+            print("       \(result.formatDisplayName) · \(result.label.first ?? "no label") \(result.catno ?? "")")
+            print("       \(result.country ?? "?")")
+        }
+        await printRateLimit("search")
+        exit(0)
+    }
 
     if releaseOnly {
         let page = try await client.collectionPage(user: identity.username, page: 1, perPage: 1)

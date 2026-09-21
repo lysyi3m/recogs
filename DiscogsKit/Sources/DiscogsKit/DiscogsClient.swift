@@ -131,13 +131,71 @@ public struct DiscogsClient: Sendable {
         return items
     }
 
+    // MARK: - Search
+
+    /// `GET /database/search` restricted to releases, which is what the add flow picks from.
+    public func searchReleases(
+        query: String,
+        page: Int = 1,
+        perPage: Int? = nil
+    ) async throws -> SearchPage {
+        try await get(path: "/database/search", query: [
+            URLQueryItem(name: "q", value: query),
+            URLQueryItem(name: "type", value: "release"),
+            URLQueryItem(name: "page", value: String(max(page, 1))),
+            URLQueryItem(name: "per_page", value: String(perPage ?? configuration.perPage)),
+        ])
+    }
+
+    // MARK: - Collection writes
+
+    /// `POST /users/{user}/collection/folders/{folder_id}/releases/{release_id}`
+    ///
+    /// Adds a copy and returns the `instance_id` Discogs assigned it. The target must be a real
+    /// folder: folder 0 is the read-only "All" pseudo-folder.
+    @discardableResult
+    public func addToCollection(
+        user: String,
+        folderID: Int = DiscogsFolder.uncategorized,
+        releaseID: Int
+    ) async throws -> CollectionAddition {
+        try await perform(
+            method: "POST",
+            path: "/users/\(escape(user))/collection/folders/\(folderID)/releases/\(releaseID)"
+        )
+    }
+
+    /// `DELETE /users/{user}/collection/folders/{folder_id}/releases/{release_id}/instances/{instance_id}`
+    ///
+    /// Removes one copy. Keyed by `instanceID`, so owning two pressings of the same release stays
+    /// unambiguous.
+    public func removeFromCollection(
+        user: String,
+        folderID: Int,
+        releaseID: Int,
+        instanceID: Int
+    ) async throws {
+        try await performIgnoringResponse(
+            method: "DELETE",
+            path: "/users/\(escape(user))/collection/folders/\(folderID)/releases/\(releaseID)/instances/\(instanceID)"
+        )
+    }
+
     // MARK: - Request plumbing
 
     private func get<Response: Decodable>(
         path: String,
         query: [URLQueryItem] = []
     ) async throws -> Response {
-        let request = try makeRequest(path: path, query: query)
+        try await perform(method: "GET", path: path, query: query)
+    }
+
+    private func perform<Response: Decodable>(
+        method: String,
+        path: String,
+        query: [URLQueryItem] = []
+    ) async throws -> Response {
+        let request = try makeRequest(method: method, path: path, query: query)
         let data = try await send(request)
         do {
             return try decoder.decode(Response.self, from: data)
@@ -146,7 +204,16 @@ public struct DiscogsClient: Sendable {
         }
     }
 
-    private func makeRequest(path: String, query: [URLQueryItem]) throws -> URLRequest {
+    /// Sends a request whose response body is not needed.
+    private func performIgnoringResponse(
+        method: String,
+        path: String,
+        query: [URLQueryItem] = []
+    ) async throws {
+        _ = try await send(try makeRequest(method: method, path: path, query: query))
+    }
+
+    private func makeRequest(method: String, path: String, query: [URLQueryItem]) throws -> URLRequest {
         guard var components = URLComponents(
             url: configuration.baseURL.appendingPathComponent(path),
             resolvingAgainstBaseURL: false
@@ -157,7 +224,7 @@ public struct DiscogsClient: Sendable {
         guard let url = components.url else { throw DiscogsError.invalidURL }
 
         var request = URLRequest(url: url)
-        request.httpMethod = "GET"
+        request.httpMethod = method
         request.setValue("Discogs token=\(token)", forHTTPHeaderField: "Authorization")
         request.setValue(configuration.userAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("application/json", forHTTPHeaderField: "Accept")

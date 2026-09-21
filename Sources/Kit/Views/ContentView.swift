@@ -12,6 +12,7 @@ public struct ContentView: View {
 
     @State private var syncController: SyncController?
     @State private var selection: CachedCollectionItem?
+    @State private var isAdding = false
 
     public init() {}
 
@@ -32,6 +33,11 @@ public struct ContentView: View {
                 .navigationDestination(item: $selection) { item in
                     RecordDetailView(item: item)
                 }
+                .sheet(isPresented: $isAdding) {
+                    AddRecordView()
+                        .environment(services)
+                        .modelContainer(services.modelContainer)
+                }
         }
         .task {
             if syncController == nil { syncController = SyncController(services: services) }
@@ -50,6 +56,7 @@ public struct ContentView: View {
             } actions: {
                 Button("Sync Now") { Task { await syncController?.sync() } }
                     .disabled(syncController?.isSyncing ?? true)
+                Button("Add a Record") { isAdding = true }
             }
         } else {
             CollectionGridView(
@@ -63,8 +70,20 @@ public struct ContentView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         if services.hasToken {
+            addButton
             sortMenu
             refreshButton
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var addButton: some ToolbarContent {
+        ToolbarItem {
+            Button {
+                isAdding = true
+            } label: {
+                Label("Add Record", systemImage: "plus")
+            }
         }
     }
 

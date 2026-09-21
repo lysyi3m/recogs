@@ -52,6 +52,42 @@ final class CachedCollectionItem {
         sortTitle = Self.sortKey(item.basicInformation.title)
     }
 
+    /// Builds a row from an optimistic add, before Discogs has confirmed it.
+    init(from pending: PendingAddition) {
+        instanceID = pending.instanceID
+        releaseID = pending.releaseID
+        folderID = pending.folderID
+        dateAdded = pending.dateAdded
+        rating = 0
+        title = pending.title
+        artistName = pending.artistName
+        year = pending.year
+        thumbURL = pending.thumbURL
+        coverURL = pending.coverURL
+        formatSummary = pending.formatSummary
+        labelName = pending.labelName
+        catalogNumber = pending.catalogNumber
+        genres = pending.genres
+        styles = pending.styles
+        sortArtist = Self.sortKey(pending.artistName)
+        sortTitle = Self.sortKey(pending.title)
+    }
+
+    /// Replaces the search-derived fields with the release's authoritative ones, after an add.
+    func apply(_ release: Release) {
+        title = release.title
+        artistName = release.artistDisplayName
+        year = release.year
+        formatSummary = release.formatDisplayName
+        labelName = release.labels.first?.name
+        catalogNumber = release.labels.first?.catno
+        genres = release.genres
+        styles = release.styles
+        if let cover = release.primaryImage?.uri { coverURL = cover }
+        sortArtist = Self.sortKey(artistName)
+        sortTitle = Self.sortKey(title)
+    }
+
     /// Applies a fresh snapshot in place. Discogs wins on every field.
     func update(from item: CollectionItem) {
         releaseID = item.releaseID

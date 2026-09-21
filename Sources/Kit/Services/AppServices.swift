@@ -21,6 +21,28 @@ public final class AppServices {
 
     var hasToken: Bool { client != nil }
 
+    /// Remembered so collection writes do not spend a request on `/oauth/identity` every time.
+    @ObservationIgnored private var cachedUsername: String?
+    private static let usernameKey = "discogsUsername"
+
+    /// The username the token belongs to, resolved once and remembered.
+    func username() async throws -> String {
+        if let cachedUsername { return cachedUsername }
+        if let stored = UserDefaults.standard.string(forKey: Self.usernameKey), !stored.isEmpty {
+            cachedUsername = stored
+            return stored
+        }
+        guard let client else { throw DiscogsError.unauthorized(message: "No Discogs token.") }
+        let identity = try await client.identity()
+        rememberUsername(identity.username)
+        return identity.username
+    }
+
+    private func rememberUsername(_ username: String) {
+        cachedUsername = username
+        UserDefaults.standard.set(username, forKey: Self.usernameKey)
+    }
+
     public convenience init(modelContainer: ModelContainer) {
         self.init(modelContainer: modelContainer, tokenStore: TokenStore(), imageCache: ImageCache())
     }
@@ -53,12 +75,19 @@ public final class AppServices {
         let identity = try await candidate.identity()
         try tokenStore.save(token)
         client = candidate
+        rememberUsername(identity.username)
         return identity
     }
 
     func signOut() throws {
         try tokenStore.delete()
         client = nil
+        cachedUsername = nil
+        UserDefaults.standard.removeObject(forKey: Self.usernameKey)
+    }
+
+    func makeEditor() -> CollectionEditor {
+        CollectionEditor(services: self)
     }
 
     func makeSyncer() -> CollectionSyncer? {

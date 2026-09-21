@@ -323,3 +323,96 @@ public struct ReleaseImage: Codable, Sendable, Hashable {
     public let width: Int?
     public let height: Int?
 }
+
+// MARK: - Search
+
+public struct SearchPage: Codable, Sendable {
+    public let pagination: Pagination
+    public let results: [SearchResult]
+}
+
+/// One hit from `GET /database/search`.
+///
+/// Search results are shaped differently from collection items: the title is a single
+/// `Artist - Album` string, and `year` arrives as text, so both need unpicking before they can fill
+/// the cache.
+public struct SearchResult: Codable, Sendable, Hashable, Identifiable {
+    public let id: Int
+    public let type: String
+    /// Combined `Artist - Album`.
+    public let title: String
+    public let thumb: String?
+    public let coverImage: String?
+    public let country: String?
+    public let format: [String]
+    public let label: [String]
+    public let catno: String?
+    public let genre: [String]
+    public let style: [String]
+    public let masterID: Int?
+    public let resourceURL: String?
+
+    /// Search sends the year as a string, and sometimes not at all.
+    public let year: Int?
+
+    /// Artist portion of `title`, or nil when Discogs did not use the usual separator.
+    public var artistName: String? {
+        guard let range = title.range(of: " - ") else { return nil }
+        return String(title[title.startIndex..<range.lowerBound])
+    }
+
+    /// Album portion of `title`, falling back to the whole string.
+    public var releaseTitle: String {
+        guard let range = title.range(of: " - ") else { return title }
+        return String(title[range.upperBound...])
+    }
+
+    public var formatDisplayName: String { format.joined(separator: ", ") }
+
+    enum CodingKeys: String, CodingKey {
+        case id, type, title, thumb, country, format, label, catno, genre, style, year
+        case coverImage = "cover_image"
+        case masterID = "master_id"
+        case resourceURL = "resource_url"
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(Int.self, forKey: .id)
+        type = try container.decodeIfPresent(String.self, forKey: .type) ?? "release"
+        title = try container.decodeIfPresent(String.self, forKey: .title) ?? ""
+        thumb = try container.decodeIfPresent(String.self, forKey: .thumb)
+        coverImage = try container.decodeIfPresent(String.self, forKey: .coverImage)
+        country = try container.decodeIfPresent(String.self, forKey: .country)
+        format = try container.decodeIfPresent([String].self, forKey: .format) ?? []
+        label = try container.decodeIfPresent([String].self, forKey: .label) ?? []
+        catno = try container.decodeIfPresent(String.self, forKey: .catno)
+        genre = try container.decodeIfPresent([String].self, forKey: .genre) ?? []
+        style = try container.decodeIfPresent([String].self, forKey: .style) ?? []
+        masterID = try container.decodeIfPresent(Int.self, forKey: .masterID)
+        resourceURL = try container.decodeIfPresent(String.self, forKey: .resourceURL)
+
+        // `year` is a string here, unlike everywhere else in the API, and may be absent, empty,
+        // or a full date. Accept a number too, in case that ever changes.
+        let parsedYear: Int?
+        if let text = try? container.decodeIfPresent(String.self, forKey: .year) {
+            parsedYear = Int(text.prefix(4))
+        } else {
+            parsedYear = try? container.decodeIfPresent(Int.self, forKey: .year)
+        }
+        year = (parsedYear == 0) ? nil : parsedYear
+    }
+}
+
+// MARK: - Collection writes
+
+/// Response of a successful add: Discogs assigns the new copy an `instance_id`.
+public struct CollectionAddition: Codable, Sendable, Hashable {
+    public let instanceID: Int
+    public let resourceURL: String?
+
+    enum CodingKeys: String, CodingKey {
+        case instanceID = "instance_id"
+        case resourceURL = "resource_url"
+    }
+}

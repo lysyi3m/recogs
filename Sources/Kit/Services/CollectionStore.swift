@@ -65,6 +65,28 @@ actor CollectionStore {
         try modelContext.save()
     }
 
+    // MARK: - Optimistic writes
+
+    /// Inserts a copy the user just added, before Discogs has confirmed it.
+    func insert(_ pending: PendingAddition) throws {
+        modelContext.insert(CachedCollectionItem(from: pending))
+        try modelContext.save()
+    }
+
+    /// Swaps a provisional id for the one Discogs assigned.
+    func reassignInstanceID(from provisional: Int, to confirmed: Int) throws {
+        guard let item = try cachedItem(instanceID: provisional) else { return }
+        item.instanceID = confirmed
+        try modelContext.save()
+    }
+
+    /// Replaces the search-derived fields with the release's own, once it has been fetched.
+    func apply(_ release: Release, toInstanceID instanceID: Int) throws {
+        guard let item = try cachedItem(instanceID: instanceID) else { return }
+        item.apply(release)
+        try modelContext.save()
+    }
+
     // MARK: - Release detail
 
     func releaseDetail(releaseID: Int) throws -> ReleaseDetailSnapshot? {

@@ -4,9 +4,10 @@
 PROJECT := Recogs.xcodeproj
 SCHEME  := Recogs
 PACKAGE := DiscogsKit
+QUERY   ?= remain in light
 
 .DEFAULT_GOAL := help
-.PHONY: help generate test test-package test-app build build-ios probe probe-cdn probe-release clean
+.PHONY: help generate test test-package test-app build build-ios probe probe-cdn probe-release probe-search clean
 
 help: ## List available targets
 	@grep -E '^[a-z][a-zA-Z-]*:.*##' $(MAKEFILE_LIST) | sed -E 's/:.*## / — /' | sort
@@ -40,6 +41,9 @@ probe-cdn: ## Measure whether CDN image loads consume the API rate limit
 
 probe-release: ## Fetch one real release with its tracklist
 	swift run --package-path $(PACKAGE) discogs-probe --release
+
+probe-search: ## Search Discogs releases (QUERY="remain in light")
+	swift run --package-path $(PACKAGE) discogs-probe --search "$(QUERY)"
 
 clean: ## Remove build artifacts
 	rm -rf build $(PACKAGE)/.build
