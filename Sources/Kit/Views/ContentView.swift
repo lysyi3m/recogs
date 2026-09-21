@@ -148,7 +148,8 @@ public struct ContentView: View {
         if services.hasToken {
             addButton
             sortMenu
-            refreshButton
+            // Syncing is a command, not a control: it lives on ⌘R, the Collection menu, and
+            // pull-to-refresh. A permanent button for something used a few times a month is noise.
             #if os(iOS)
             settingsButton
             #endif
@@ -203,18 +204,6 @@ public struct ContentView: View {
             } label: {
                 Label("Sort", systemImage: "arrow.up.arrow.down")
             }
-        }
-    }
-
-    @ToolbarContentBuilder
-    private var refreshButton: some ToolbarContent {
-        ToolbarItem {
-            Button {
-                Task { await syncController.sync() }
-            } label: {
-                Label("Refresh", systemImage: "arrow.clockwise")
-            }
-            .disabled(syncController.isSyncing)
         }
     }
 
