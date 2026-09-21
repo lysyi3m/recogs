@@ -13,6 +13,7 @@ struct SetupView: View {
     @Environment(AppServices.self) private var services
 
     @State private var token = ""
+    @FocusState private var isFieldFocused: Bool
     @State private var state: State = .idle
 
     private enum State: Equatable {
@@ -24,71 +25,144 @@ struct SetupView: View {
     private static let tokenSettingsURL = URL(string: "https://www.discogs.com/settings/developers")!
 
     var body: some View {
+        #if os(iOS)
+        // A tall phone: branding in the upper half, the controls within thumb reach. Centring a
+        // small block in the middle of an iPhone wastes the screen and reads as unfinished.
+        VStack(spacing: 0) {
+            Spacer(minLength: 24)
+            branding
+            Spacer(minLength: 32)
+            form
+        }
+        .frame(maxWidth: 420)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 28)
+        .padding(.bottom, 24)
+        .animation(.default, value: state)
+        #else
         VStack(spacing: 28) {
-            VStack(spacing: 10) {
-                Image(systemName: "record.circle")
-                    .font(.system(size: 56, weight: .light))
-                    .foregroundStyle(.secondary)
+            branding
+            form
+        }
+        .frame(maxWidth: 320)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(32)
+        .animation(.default, value: state)
+        #endif
+    }
+
+    private var branding: some View {
+        VStack(spacing: 14) {
+            // Outline, not filled: the filled symbol renders as a grey disc with a dot and reads
+            // as an eye rather than a record.
+            Image(systemName: "record.circle")
+                .font(.system(size: iconSize, weight: .ultraLight))
+                .foregroundStyle(.primary)
+
+            VStack(spacing: 6) {
                 Text("Welcome to Recogs")
-                    .font(.title.weight(.semibold))
+                    .font(titleFont)
+                    .multilineTextAlignment(.center)
+                    .minimumScaleFactor(0.8)
+                    .lineLimit(2)
                 Text("Your Discogs collection, on this device.")
+                    .font(.callout)
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
             }
+        }
+    }
 
-            VStack(spacing: 10) {
-                SecureField("Personal Access Token", text: $token)
-                    .textFieldStyle(.roundedBorder)
-                    .controlSize(.large)
-                    .disabled(isValidating)
-                    .onSubmit(validate)
-                    #if os(iOS)
-                    .autocorrectionDisabled()
-                    .textInputAutocapitalization(.never)
-                    .submitLabel(.go)
-                    #endif
-
-                Button(action: validate) {
-                    // A fixed-height label keeps the button from resizing when the spinner
-                    // replaces the text.
-                    ZStack {
-                        Text("Connect").opacity(isValidating ? 0 : 1)
-                        if isValidating {
-                            ProgressView().controlSize(.small)
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
+    private var form: some View {
+        VStack(spacing: 12) {
+            // Styled by hand rather than with `.roundedBorder`, which ignores control size: next
+            // to a large prominent button it renders as a short thin box, and the two read as
+            // unrelated controls instead of one input pair.
+            SecureField("Personal Access Token", text: $token)
+                .textFieldStyle(.plain)
+                .focused($isFieldFocused)
+                .disabled(isValidating)
+                .onSubmit(validate)
+                #if os(iOS)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .submitLabel(.go)
+                #endif
+                .padding(.horizontal, 16)
+                .frame(height: fieldHeight)
+                .background(.quaternary.opacity(0.5), in: .capsule)
+                // A hand-styled field has no focus ring of its own; without one there is no sign
+                // the field is ready for typing.
+                .overlay {
+                    Capsule()
+                        .strokeBorder(
+                            isFieldFocused ? AnyShapeStyle(.tint) : AnyShapeStyle(.separator),
+                            lineWidth: isFieldFocused ? 2 : 0.5
+                        )
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .disabled(trimmedToken.isEmpty || isValidating)
+                .animation(.easeOut(duration: 0.12), value: isFieldFocused)
+                // A plain field only accepts taps on the text itself, leaving most of the drawn
+                // capsule dead to touch. Focus is taken explicitly so the whole capsule works.
+                .contentShape(.capsule)
+                .onTapGesture { isFieldFocused = true }
 
-                if case .failed(let message) = state {
-                    Text(message)
-                        .font(.callout)
-                        .foregroundStyle(.red)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .transition(.opacity)
+            Button(action: validate) {
+                // A fixed-size label keeps the button from resizing when the spinner replaces
+                // the text.
+                ZStack {
+                    Text("Connect").fontWeight(.semibold).opacity(isValidating ? 0 : 1)
+                    if isValidating { ProgressView().controlSize(.small) }
                 }
+                .frame(maxWidth: .infinity)
+                .frame(height: fieldHeight)
+            }
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
+            .disabled(trimmedToken.isEmpty || isValidating)
+
+            if case .failed(let message) = state {
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .transition(.opacity)
             }
 
             VStack(spacing: 6) {
                 Link(destination: Self.tokenSettingsURL) {
                     Text("Generate a token on Discogs")
                 }
+                .font(.footnote.weight(.medium))
+
                 Text("Stored in the Keychain on this device, and never sent anywhere but Discogs.")
-                    .foregroundStyle(.secondary)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .font(.callout)
+            .padding(.top, 8)
         }
-        .frame(maxWidth: 320)
-        // Centred in whatever space the window gives it, rather than pinned to the top.
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(32)
-        .animation(.default, value: state)
     }
+
+    private var iconSize: CGFloat {
+        #if os(iOS)
+        76
+        #else
+        60
+        #endif
+    }
+
+    private var titleFont: Font {
+        #if os(iOS)
+        .largeTitle.weight(.bold)
+        #else
+        .title.weight(.semibold)
+        #endif
+    }
+
+    /// One height for the field and the button, so they read as a pair.
+    private var fieldHeight: CGFloat { 46 }
 
     private var trimmedToken: String {
         token.trimmingCharacters(in: .whitespacesAndNewlines)

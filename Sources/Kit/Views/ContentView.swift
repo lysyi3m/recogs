@@ -48,12 +48,13 @@ public struct ContentView: View {
                 .toolbar { toolbarContent }
                 // Filters the cached collection as you type; the add sheet is what searches
                 // Discogs itself.
-                .searchable(
-                    text: $searchQuery,
-                    placement: .toolbar,
-                    prompt: "Find in Collection"
+                .modifier(
+                    CollectionSearchField(
+                        isEnabled: services.hasToken,
+                        text: $searchQuery,
+                        isFocused: $isSearchFocused
+                    )
                 )
-                .searchFocused($isSearchFocused)
                 .navigationDestination(item: $selection) { item in
                     RecordDetailView(item: item)
                 }
@@ -311,6 +312,26 @@ public struct ContentView: View {
             Text("Not synced yet")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+    }
+}
+
+/// The collection search field, present only once there is a collection to search.
+///
+/// `.searchable` cannot be applied conditionally on its own, so applying it unconditionally put a
+/// search field on the onboarding screen, where there is nothing to search.
+private struct CollectionSearchField: ViewModifier {
+    let isEnabled: Bool
+    @Binding var text: String
+    var isFocused: FocusState<Bool>.Binding
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content
+                .searchable(text: $text, placement: .toolbar, prompt: "Find in Collection")
+                .searchFocused(isFocused)
+        } else {
+            content
         }
     }
 }
