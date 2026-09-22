@@ -24,6 +24,15 @@ actor CollectionStore {
         return try modelContext.fetch(descriptor).map(\.snapshot)
     }
 
+    /// Whether any copy of this release is in the collection, for settling an unconfirmed add.
+    func containsRelease(_ releaseID: Int) throws -> Bool {
+        var descriptor = FetchDescriptor<CachedCollectionItem>(
+            predicate: #Predicate { $0.releaseID == releaseID }
+        )
+        descriptor.fetchLimit = 1
+        return try modelContext.fetch(descriptor).isEmpty == false
+    }
+
     func item(instanceID: Int) throws -> CollectionItemSnapshot? {
         try cachedItem(instanceID: instanceID)?.snapshot
     }

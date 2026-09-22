@@ -17,11 +17,13 @@ struct CollectionFailureAlert: ViewModifier {
             ),
             presenting: editor?.failure
         ) { failure in
-            Button("Try Again") {
-                editor?.clearFailure()
-                Task { await failure.retry() }
+            if let retry = failure.retry {
+                Button("Try Again") {
+                    editor?.clearFailure()
+                    Task { await retry() }
+                }
             }
-            Button("Cancel", role: .cancel) {
+            Button(failure.retry == nil ? "OK" : "Cancel", role: .cancel) {
                 editor?.clearFailure()
             }
         } message: { failure in

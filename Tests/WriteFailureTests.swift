@@ -9,14 +9,19 @@ struct WriteFailureTests {
     /// Intercepts `URLSession.shared`, which is what `AppServices` builds its client on. Fails the
     /// write once, then lets it through, so a retry has something different to find.
     final class FlakyProtocol: URLProtocol, @unchecked Sendable {
-        nonisolated(unsafe) static var failNextWrite = true
         nonisolated(unsafe) static var writeAttempts = 0
+        /// How many writes fail before one is allowed through. A DELETE that meets a 5xx is
+        /// retried by the client, so a persistent failure needs every attempt to fail.
+        nonisolated(unsafe) static var writesToFail = 1
+        /// What a failing write answers with. 403 is a definite rejection; 503 is not.
+        nonisolated(unsafe) static var failureStatus = 403
         private static let lock = NSLock()
 
-        static func reset() {
+        static func reset(failureStatus: Int = 403, writesToFail: Int = 1) {
             lock.withLock {
-                failNextWrite = true
                 writeAttempts = 0
+                self.failureStatus = failureStatus
+                self.writesToFail = writesToFail
             }
         }
 
@@ -36,10 +41,9 @@ struct WriteFailureTests {
             } else if isWrite {
                 let shouldFail = Self.lock.withLock { () -> Bool in
                     Self.writeAttempts += 1
-                    defer { Self.failNextWrite = false }
-                    return Self.failNextWrite
+                    return Self.writeAttempts <= Self.writesToFail
                 }
-                status = shouldFail ? 403 : 204
+                status = shouldFail ? Self.lock.withLock({ Self.failureStatus }) : 204
                 body = shouldFail ? #"{"message":"Nope."}"# : ""
             } else {
                 status = 200
@@ -82,6 +86,41 @@ struct WriteFailureTests {
         return try DiscogsClient.makeDecoder().decode(CollectionItem.self, from: Data(json.utf8))
     }
 
+    @Test("A removal Discogs has already applied is not undone")
+    func removeOfMissingCopyIsSuccess() async throws {
+        FlakyProtocol.reset(failureStatus: 404)
+        URLProtocol.registerClass(FlakyProtocol.self)
+        defer { URLProtocol.unregisterClass(FlakyProtocol.self) }
+
+        let (services, tokenStore) = try makeServices()
+        defer { try? tokenStore.delete() }
+        try await services.store.upsert([try makeItem(instanceID: 111)])
+
+        // 404 means Discogs has no such copy — which is exactly what the user asked for. Restoring
+        // the row would resurrect a record that is already gone upstream.
+        let editor = services.makeEditor()
+        #expect(await editor.remove(instanceID: 111) == true)
+        #expect(try await services.store.itemCount() == 0)
+        #expect(editor.failure == nil)
+    }
+
+    @Test("An unconfirmed removal is not rolled back, and offers no retry")
+    func unconfirmedRemoveIsNotRolledBack() async throws {
+        // 503 after the retries: the delete may well have been applied before it failed.
+        FlakyProtocol.reset(failureStatus: 503, writesToFail: .max)
+        URLProtocol.registerClass(FlakyProtocol.self)
+        defer { URLProtocol.unregisterClass(FlakyProtocol.self) }
+
+        let (services, tokenStore) = try makeServices()
+        defer { try? tokenStore.delete() }
+        try await services.store.upsert([try makeItem(instanceID: 111)])
+
+        let editor = services.makeEditor()
+        #expect(await editor.remove(instanceID: 111) == false)
+        let failure = try #require(editor.failure)
+        #expect(failure.retry == nil, "retrying an unconfirmed write can duplicate or mislead")
+    }
+
     @Test("A rejected removal offers a retry that actually removes the copy")
     func failedRemoveRetries() async throws {
         FlakyProtocol.reset()
@@ -99,8 +138,9 @@ struct WriteFailureTests {
         #expect(try await services.store.itemCount() == 1, "a rejected delete rolls back")
         let failure = try #require(editor.failure)
         #expect(failure.message.isEmpty == false)
+        let retry = try #require(failure.retry, "a definite rejection is safe to retry")
 
-        await failure.retry()
+        await retry()
 
         #expect(FlakyProtocol.writeAttempts == 2, "the retry must reach Discogs again")
         #expect(try await services.store.itemCount() == 0, "the retry must remove the copy")

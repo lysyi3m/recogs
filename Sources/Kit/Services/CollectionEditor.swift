@@ -20,7 +20,9 @@ final class CollectionEditor {
         let id = UUID()
         let title: String
         let message: String
-        let retry: @MainActor () async -> Void
+        /// Absent when retrying could do damage — an unconfirmed write may already have been
+        /// applied, and repeating it would add a second copy.
+        let retry: (@MainActor () async -> Void)?
     }
 
     /// The same failure as a status line, for the surfaces that show sync state alongside it.
@@ -50,7 +52,7 @@ final class CollectionEditor {
         failure = nil
         defer { isWorking = false }
 
-        func failed(_ error: any Error) {
+        func rejected(_ error: any Error) {
             failure = Failure(
                 title: "Couldn't add \(result.title)",
                 message: error.localizedDescription,
@@ -64,7 +66,7 @@ final class CollectionEditor {
         do {
             try await services.store.insert(pending)
         } catch {
-            failed(error)
+            rejected(error)
             return false
         }
 
@@ -80,9 +82,15 @@ final class CollectionEditor {
                 releaseID: result.id
             )
         } catch {
-            failed(error)
             try? await services.store.deleteItem(instanceID: provisionalID)
-            return false
+            // Only a definite rejection means the copy is not on Discogs. Anything else may have
+            // been applied before the answer went missing, so ask Discogs rather than guess —
+            // rolling back and offering a retry is how a second copy gets added.
+            if (error as? DiscogsError)?.didNotReachDiscogs ?? false {
+                rejected(error)
+                return false
+            }
+            return await reconcileAdd(of: result, after: error)
         }
 
         do {
@@ -110,7 +118,7 @@ final class CollectionEditor {
         failure = nil
         defer { isWorking = false }
 
-        func failed(_ error: any Error, title: String) {
+        func rejected(_ error: any Error, title: String) {
             failure = Failure(
                 title: title,
                 message: error.localizedDescription,
@@ -122,7 +130,7 @@ final class CollectionEditor {
         do {
             snapshot = try await services.store.item(instanceID: instanceID)
         } catch {
-            failed(error, title: "Couldn't remove the copy")
+            rejected(error, title: "Couldn't remove the copy")
             return false
         }
         guard let snapshot else { return false }
@@ -130,7 +138,7 @@ final class CollectionEditor {
         do {
             try await services.store.deleteItem(instanceID: instanceID)
         } catch {
-            failed(error, title: "Couldn't remove \(snapshot.title)")
+            rejected(error, title: "Couldn't remove \(snapshot.title)")
             return false
         }
 
@@ -143,11 +151,71 @@ final class CollectionEditor {
                 instanceID: snapshot.instanceID
             )
             return true
+        } catch let error as DiscogsError where error.isNotFound {
+            // Already gone from Discogs, which is the state the user asked for. Putting the row
+            // back because the server said "no such copy" would undo a removal that has happened.
+            return true
         } catch {
-            failed(error, title: "Couldn't remove \(snapshot.title)")
+            guard (error as? DiscogsError)?.didNotReachDiscogs ?? false else {
+                // The delete may have been applied. Let Discogs settle it rather than restoring a
+                // copy that is no longer there.
+                return await reconcileRemove(of: snapshot, after: error)
+            }
+            rejected(error, title: "Couldn't remove \(snapshot.title)")
             try? await services.store.restore(snapshot)
             return false
         }
+    }
+
+    // MARK: - Reconciliation
+
+    /// Settles a write whose outcome Discogs never confirmed, by asking Discogs what is true.
+    ///
+    /// A sync is authoritative: it reconciles the whole folder by `instance_id`. If it cannot run —
+    /// offline, most likely — the outcome stays genuinely unknown, and saying so is better than
+    /// offering a retry that might duplicate the copy.
+    private func reconcileAdd(of result: SearchResult, after error: any Error) async -> Bool {
+        await services.syncController.sync()
+        guard syncSucceeded else {
+            failure = Failure(
+                title: "Couldn't confirm the add",
+                message: "\(result.title) may or may not have been added. Sync when you are back online to find out.",
+                retry: nil
+            )
+            return false
+        }
+        if (try? await services.store.containsRelease(result.id)) == true { return true }
+        // Verified absent, so a retry is safe to offer.
+        failure = Failure(
+            title: "Couldn't add \(result.title)",
+            message: error.localizedDescription,
+            retry: { [weak self] in _ = await self?.add(result) }
+        )
+        return false
+    }
+
+    private func reconcileRemove(of snapshot: CollectionItemSnapshot, after error: any Error) async -> Bool {
+        await services.syncController.sync()
+        guard syncSucceeded else {
+            failure = Failure(
+                title: "Couldn't confirm the removal",
+                message: "\(snapshot.title) may or may not have been removed. Sync when you are back online to find out.",
+                retry: nil
+            )
+            return false
+        }
+        // The sync restores the copy if Discogs still has it, and leaves it gone if not.
+        if (try? await services.store.item(instanceID: snapshot.instanceID)) == nil { return true }
+        failure = Failure(
+            title: "Couldn't remove \(snapshot.title)",
+            message: error.localizedDescription,
+            retry: { [weak self] in _ = await self?.remove(instanceID: snapshot.instanceID) }
+        )
+        return false
+    }
+
+    private var syncSucceeded: Bool {
+        services.syncController.errorMessage == nil && !services.syncController.isOffline
     }
 
     /// Best-effort accuracy pass. A failure here leaves the copy added with search-derived text,

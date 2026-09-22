@@ -33,10 +33,43 @@ extension DiscogsError {
         return false
     }
 
+    /// True when Discogs has no such resource. On a delete that is the desired end state, not a
+    /// failure: the copy is already gone.
+    public var isNotFound: Bool {
+        if case .notFound = self { return true }
+        if case .http(let status, _) = self, status == 404 { return true }
+        return false
+    }
+
     /// True when the token is missing, wrong, or revoked, so the fix is to re-enter it.
     public var isUnauthorized: Bool {
         if case .unauthorized = self { return true }
         return false
+    }
+
+    /// Whether a write that failed with this error definitely did not reach Discogs.
+    ///
+    /// A write is not a read: rolling the local change back is only safe when the server is known
+    /// to have rejected it. A request that timed out, lost its connection, or met a 5xx may well
+    /// have been applied before the answer went missing, and a caller that assumes otherwise will
+    /// hide a copy the user really owns — or offer a retry that adds a second one.
+    public var didNotReachDiscogs: Bool {
+        switch self {
+        case .unauthorized, .notFound, .invalidURL:
+            // Answered, and the answer was no.
+            return true
+        case .rateLimited:
+            // Refused without being processed, and only after the retries are spent.
+            return true
+        case .http(let status, _):
+            // 4xx is a rejection; 5xx may have been applied before it failed.
+            return (400..<500).contains(status)
+        case .decoding:
+            // A response arrived and could not be read. The write may well have succeeded.
+            return false
+        case .transport:
+            return false
+        }
     }
 }
 
