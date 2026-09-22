@@ -12,6 +12,7 @@ struct AddRecordView: View {
     @State private var query = ""
     @State private var confirming: SearchResult?
     @State private var editor: CollectionEditor?
+    @State private var hoveredResultID: Int?
     @State private var search: ReleaseSearchController?
     /// Shown when there is no client to search with, which is not a search failure.
     @State private var noTokenMessage: String?
@@ -160,6 +161,7 @@ struct AddRecordView: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(editor?.isWorking ?? false)
+                        .rowHoverHighlight(id: result.id, hovered: $hoveredResultID)
                     }
                 } footer: {
                     if total > results.count {

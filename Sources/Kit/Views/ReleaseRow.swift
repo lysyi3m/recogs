@@ -55,6 +55,30 @@ struct ReleaseRow: View {
     }
 }
 
+extension View {
+    /// Highlights a list row while the pointer is over it.
+    ///
+    /// The caller keeps one optional id for the whole list rather than a flag per row, so a move
+    /// redraws the two rows that changed instead of all of them. `listRowBackground` rather than a
+    /// background on the content, so the highlight spans the full row including its insets. A
+    /// no-op where there is no pointer.
+    func rowHoverHighlight<ID: Hashable>(id: ID, hovered: Binding<ID?>) -> some View {
+        #if os(macOS)
+        self
+            .listRowBackground(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(hovered.wrappedValue == id ? Color.primary.opacity(0.06) : .clear)
+            )
+            .onHover { isInside in
+                if isInside { hovered.wrappedValue = id }
+                else if hovered.wrappedValue == id { hovered.wrappedValue = nil }
+            }
+        #else
+        self
+        #endif
+    }
+}
+
 extension ReleaseRow {
     /// Joins the parts that are present, dropping the empties, so a missing label never leaves a
     /// stray separator behind.

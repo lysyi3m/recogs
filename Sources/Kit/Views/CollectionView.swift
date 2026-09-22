@@ -17,9 +17,7 @@ struct CollectionView: View {
     private let onSelect: (CachedCollectionItem) -> Void
     private let onRequestRemove: (CachedCollectionItem) -> Void
 
-    #if os(macOS)
     @State private var hoveredID: PersistentIdentifier?
-    #endif
 
     init(
         layout: CollectionLayout,
@@ -112,18 +110,8 @@ struct CollectionView: View {
                                 onRequestRemove(item)
                             }
                         }
-                        #else
-                        // A pointer needs to be told what it is about to click. One piece of state
-                        // for the whole list rather than one per row, so only two rows redraw.
-                        .listRowBackground(
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(hoveredID == item.id ? Color.primary.opacity(0.06) : .clear)
-                        )
-                        .onHover { isInside in
-                            if isInside { hoveredID = item.id }
-                            else if hoveredID == item.id { hoveredID = nil }
-                        }
                         #endif
+                        .rowHoverHighlight(id: item.id, hovered: $hoveredID)
                 }
             }
             #if os(macOS)
