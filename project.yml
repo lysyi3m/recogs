@@ -37,6 +37,9 @@ targets:
     supportedDestinations: [macOS, iOS]
     sources:
       - Sources/Kit
+      # UserDefaults is a required-reason API and the calls live in this framework, so its bundle
+      # carries the declaration. The app bundle gets the same file; Apple scans both.
+      - Config/PrivacyInfo.xcprivacy
     dependencies:
       - package: DiscogsKit
         product: DiscogsKit
@@ -51,6 +54,7 @@ targets:
     supportedDestinations: [macOS, iOS]
     sources:
       - Sources/App
+      - Config/PrivacyInfo.xcprivacy
     dependencies:
       - target: RecogsKit
     info:
