@@ -14,9 +14,9 @@ struct SetupView: View {
 
     @State private var token = ""
     @FocusState private var isFieldFocused: Bool
-    @State private var state: State = .idle
+    @State private var phase: Phase = .idle
 
-    private enum State: Equatable {
+    private enum Phase: Equatable {
         case idle
         case validating
         case failed(String)
@@ -38,7 +38,7 @@ struct SetupView: View {
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 28)
         .padding(.bottom, 24)
-        .animation(.default, value: state)
+        .animation(.default, value: phase)
         #else
         VStack(spacing: 28) {
             branding
@@ -47,7 +47,7 @@ struct SetupView: View {
         .frame(maxWidth: 360)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(32)
-        .animation(.default, value: state)
+        .animation(.default, value: phase)
         #endif
     }
 
@@ -120,7 +120,7 @@ struct SetupView: View {
             .buttonBorderShape(.capsule)
             .disabled(trimmedToken.isEmpty || isValidating)
 
-            if case .failed(let message) = state {
+            if case .failed(let message) = phase {
                 Text(message)
                     .font(.footnote)
                     .foregroundStyle(.red)
@@ -168,19 +168,19 @@ struct SetupView: View {
         token.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var isValidating: Bool { state == .validating }
+    private var isValidating: Bool { phase == .validating }
 
     private func validate() {
         guard !trimmedToken.isEmpty else { return }
-        state = .validating
+        phase = .validating
         Task {
             do {
                 try await services.signIn(token: trimmedToken)
                 token = ""
-                state = .idle
+                phase = .idle
                 onSignedIn()
             } catch {
-                state = .failed(message(for: error))
+                phase = .failed(message(for: error))
             }
         }
     }
