@@ -214,7 +214,10 @@ struct RecordDetailView: View {
         add("Label", item.labelName)
         add("Catalog number", item.catalogNumber)
         add("Released", detail?.releasedDisplay)
-        add("Country", detail?.country)
+        // Discogs mixes countries with regions ("Europe"), compounds ("UK & Europe") and
+        // historical states, and sends abbreviations rather than CLDR names, so the value cannot
+        // be classified reliably. The label covers both rather than claiming one.
+        add("Country/Region", detail?.country)
         add("Added", item.dateAdded?.formatted(date: .abbreviated, time: .omitted))
         return entries
     }
