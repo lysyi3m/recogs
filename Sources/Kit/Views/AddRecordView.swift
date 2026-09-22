@@ -21,32 +21,7 @@ struct AddRecordView: View {
     private var results: [SearchResult] { search?.results ?? [] }
 
     var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                searchField
-                if let message = noTokenMessage {
-                    banner(message)
-                }
-                if editor?.isWorking == true {
-                    ProgressView("Adding…")
-                        .progressViewStyle(.linear)
-                        .padding(.horizontal, 12)
-                        .padding(.bottom, 8)
-                }
-                Divider()
-                content
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            .navigationTitle("Add Record")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
-        }
+        sheet
         // A macOS sheet sizes itself to its content, and a List inside a VStack reports no height
         // of its own. Without an explicit size the results area collapses to nothing and the sheet
         // renders as a search field over blank space.
@@ -76,33 +51,117 @@ struct AddRecordView: View {
         }
     }
 
+    /// A macOS sheet has no navigation bar worth the name: a title strip, a search strip and a
+    /// button strip give it three horizontal rules and no hierarchy. The title sits with the
+    /// control it introduces, and one rule separates the query from its results.
+    @ViewBuilder
+    private var sheet: some View {
+        #if os(macOS)
+        VStack(spacing: 0) {
+            header
+            Divider()
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Divider()
+            footer
+        }
+        #else
+        NavigationStack {
+            VStack(spacing: 0) {
+                header
+                Divider()
+                content
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .navigationTitle("Add Record")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+            }
+        }
+        #endif
+    }
+
+    /// No title: the sheet is a search field and what it finds. "Find a Record" already sits in
+    /// the empty state, where the eye goes, and once results arrive the query is the context. A
+    /// label repeating it above the field only crowds the control it introduces.
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            searchField
+            if let message = noTokenMessage {
+                banner(message)
+            }
+            if editor?.isWorking == true {
+                ProgressView("Adding…")
+                    .progressViewStyle(.linear)
+            }
+        }
+        .padding(headerPadding)
+    }
+
+    private var headerPadding: CGFloat {
+        #if os(macOS)
+        14
+        #else
+        12
+        #endif
+    }
+
+    private var fieldPadding: CGFloat {
+        #if os(macOS)
+        8
+        #else
+        6
+        #endif
+    }
+
+    #if os(macOS)
+    private var footer: some View {
+        HStack {
+            Spacer()
+            Button("Cancel") { dismiss() }
+                .keyboardShortcut(.cancelAction)
+        }
+        .padding(12)
+    }
+    #endif
+
     /// An explicit field and button rather than `.searchable`: the toolbar search field's submit
     /// action does not fire reliably inside a sheet on macOS, which left the view with no way to
     /// start a search and no sign that anything was wrong.
+    ///
+    /// Return runs the search, so the button is the discoverable spelling of a shortcut rather
+    /// than the primary action of the sheet — picking a result is — and it is styled to match.
     private var searchField: some View {
         HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass")
-                .foregroundStyle(.secondary)
-            TextField("Artist, title, or catalog number", text: $query)
-                .textFieldStyle(.plain)
-                .onSubmit(startSearch)
-                #if os(iOS)
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
-                .submitLabel(.search)
-                #endif
-            if !query.isEmpty {
-                Button { query = "" } label: {
-                    Image(systemName: "xmark.circle.fill")
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                TextField("Artist, title, or catalog number", text: $query)
+                    .textFieldStyle(.plain)
+                    .onSubmit(startSearch)
+                    #if os(iOS)
+                    .autocorrectionDisabled()
+                    .textInputAutocapitalization(.never)
+                    .submitLabel(.search)
+                    #endif
+                if !query.isEmpty {
+                    Button { query = "" } label: {
+                        Image(systemName: "xmark.circle.fill")
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
             }
+            .padding(.horizontal, 10)
+            .padding(.vertical, fieldPadding)
+            .background(.quaternary.opacity(0.6), in: .rect(cornerRadius: 8))
+
             Button("Search", action: startSearch)
-                .keyboardShortcut(.defaultAction)
                 .disabled(query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSearching)
         }
-        .padding(12)
     }
 
     private var isSearching: Bool { state == .searching }
@@ -123,8 +182,6 @@ struct AddRecordView: View {
             .font(.callout)
             .foregroundStyle(.red)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12)
-            .padding(.bottom, 8)
     }
 
     @ViewBuilder
