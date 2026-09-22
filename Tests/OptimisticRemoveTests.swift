@@ -37,7 +37,7 @@ struct OptimisticRemoveTests {
     @Test("Removing one copy leaves the other copy of the same release")
     func removesOnlyTheChosenInstance() async throws {
         let store = try makeStore()
-        // Two pressings of one release: exactly the case instance_id exists for.
+        // Two copies of one release: exactly the case instance_id exists for.
         try await store.upsert([
             try makeItem(instanceID: 111, releaseID: 500),
             try makeItem(instanceID: 222, releaseID: 500),

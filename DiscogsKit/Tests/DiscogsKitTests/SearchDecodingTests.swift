@@ -53,7 +53,7 @@ struct SearchDecodingTests {
         #expect(result.releaseTitle == "Untitled")
     }
 
-    @Test("Only the first separator splits, so hyphenated album names survive")
+    @Test("Only the first separator splits, so hyphenated titles survive")
     func hyphenatedTitle() throws {
         let result = try decode(SearchResult.self, from: """
         { "id": 1, "title": "Godspeed You! Black Emperor - F♯A♯∞ - Reissue" }

@@ -361,7 +361,7 @@ public struct SearchResult: Codable, Sendable, Hashable, Identifiable {
         return String(title[title.startIndex..<range.lowerBound])
     }
 
-    /// Album portion of `title`, falling back to the whole string.
+    /// Release-title portion of `title`, falling back to the whole string.
     public var releaseTitle: String {
         guard let range = title.range(of: " - ") else { return title }
         return String(title[range.upperBound...])

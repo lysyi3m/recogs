@@ -90,7 +90,7 @@ struct CollectionStoreTests {
         #expect(cached.title == "New Title", "Discogs wins on conflict")
     }
 
-    @Test("Two pressings of one release are two independent copies")
+    @Test("Two copies of one release are independent")
     func distinctInstancesOfSameRelease() async throws {
         let store = try makeStore()
         try await store.upsert([

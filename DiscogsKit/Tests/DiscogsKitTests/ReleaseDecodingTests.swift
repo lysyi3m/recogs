@@ -8,7 +8,7 @@ struct ReleaseDecodingTests {
         try DiscogsClient.makeDecoder().decode(type, from: Data(json.utf8))
     }
 
-    @Test("A release decodes its tracklist, images and pressing details")
+    @Test("A release decodes its tracklist, images and edition details")
     func release() throws {
         let json = """
         {

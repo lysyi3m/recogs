@@ -4,7 +4,7 @@ import SwiftUI
 /// Search Discogs, pick the exact release, confirm, add.
 ///
 /// Search runs on submit rather than per keystroke: the rate limit is 60 requests a minute, and
-/// typing an album name would spend most of it.
+/// typing a release title would spend most of it.
 struct AddRecordView: View {
     @Environment(AppServices.self) private var services
     @Environment(\.dismiss) private var dismiss
