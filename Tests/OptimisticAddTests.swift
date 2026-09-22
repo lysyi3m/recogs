@@ -107,7 +107,23 @@ struct OptimisticAddTests {
 
         let item = try #require(try await store.item(instanceID: -5))
         #expect(item.artistName == "Talking Heads")
-        #expect(item.coverURL == "https://i.discogs.com/front.jpeg")
+        // The search result already carried `cover_image`, and that is what the grid and the
+        // record page both draw. Replacing it with the release's full-size original would make an
+        // added record cache a different image than the same record arriving from a sync — and
+        // they share one cache slot, so whichever loaded first would win permanently.
+        #expect(item.coverURL == "https://i.discogs.com/cover.jpeg")
+    }
+
+    @Test("A result with no cover falls back to the release's own image")
+    func releaseImageFillsAMissingCover() async throws {
+        let store = try makeStore()
+        var pending = PendingAddition(from: try makeSearchResult(), instanceID: -6, folderID: 1)
+        pending.coverURL = nil
+        try await store.insert(pending)
+
+        try await store.apply(try makeRelease(), toInstanceID: -6)
+
+        #expect(try await store.item(instanceID: -6)?.coverURL == "https://i.discogs.com/front.jpeg")
     }
 
     @Test("Rolling back a failed add leaves no trace")

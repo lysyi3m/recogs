@@ -115,7 +115,11 @@ final class CachedCollectionItem {
         catalogNumber = release.labels.first?.catno
         genres = release.genres
         styles = release.styles
-        if let cover = release.primaryImage?.uri { coverURL = cover }
+        // Only as a fallback. `cover_image` is 600px at quality 90 and is what both the grid and
+        // the record page draw; the release's primary image is the full-size original, several
+        // times the bytes for no visible gain. A copy that arrived with a cover keeps it, so the
+        // same release looks the same whether it was added here or arrived from a sync.
+        if coverURL?.isEmpty != false, let cover = release.primaryImage?.uri { coverURL = cover }
         sortArtist = Self.sortKey(artistName)
         sortTitle = Self.sortKey(title)
     }
