@@ -20,6 +20,13 @@ final class CachedCollectionItem {
     /// Pre-joined artist credit, as Discogs would render it.
     var artistName: String
     var year: Int?
+    /// 0 when Discogs reports a year, 1 when it does not, kept in step with `year` at every write.
+    ///
+    /// Sorting by year has to put the yearless records last whichever direction is chosen — a
+    /// column of blanks at the top reads like the sort failed. That needs a second sort key that
+    /// always ascends, and `SortDescriptor` needs a `Comparable`, which `Bool` is not. Existing
+    /// rows migrate to 0 and are corrected by the next sync.
+    var yearRank: Int = 0
     var thumbURL: String?
     var coverURL: String?
     var formatSummary: String
@@ -41,6 +48,7 @@ final class CachedCollectionItem {
         title = item.basicInformation.title
         artistName = item.basicInformation.artistDisplayName
         year = item.basicInformation.year
+        yearRank = item.basicInformation.year == nil ? 1 : 0
         thumbURL = item.basicInformation.thumb
         coverURL = item.basicInformation.coverImage
         formatSummary = item.basicInformation.formatDisplayName
@@ -62,6 +70,7 @@ final class CachedCollectionItem {
         title = pending.title
         artistName = pending.artistName
         year = pending.year
+        yearRank = pending.year == nil ? 1 : 0
         thumbURL = pending.thumbURL
         coverURL = pending.coverURL
         formatSummary = pending.formatSummary
@@ -83,6 +92,7 @@ final class CachedCollectionItem {
         title = snapshot.title
         artistName = snapshot.artistName
         year = snapshot.year
+        yearRank = snapshot.year == nil ? 1 : 0
         thumbURL = snapshot.thumbURL
         coverURL = snapshot.coverURL
         formatSummary = snapshot.formatSummary
@@ -99,6 +109,7 @@ final class CachedCollectionItem {
         title = release.title
         artistName = release.artistDisplayName
         year = release.year
+        yearRank = year == nil ? 1 : 0
         formatSummary = release.formatDisplayName
         labelName = release.labels.first?.name
         catalogNumber = release.labels.first?.catno
@@ -118,6 +129,7 @@ final class CachedCollectionItem {
         title = item.basicInformation.title
         artistName = item.basicInformation.artistDisplayName
         year = item.basicInformation.year
+        yearRank = year == nil ? 1 : 0
         thumbURL = item.basicInformation.thumb
         coverURL = item.basicInformation.coverImage
         formatSummary = item.basicInformation.formatDisplayName

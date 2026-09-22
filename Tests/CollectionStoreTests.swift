@@ -43,6 +43,28 @@ struct CollectionStoreTests {
         return try DiscogsClient.makeDecoder().decode(CollectionItem.self, from: Data(json.utf8))
     }
 
+    @Test("Records with no year sort last in both directions")
+    func yearlessRecordsSortLast() async throws {
+        let store = try makeStore()
+        try await store.upsert([
+            try makeItem(instanceID: 1, title: "Dated", year: 1980),
+            try makeItem(instanceID: 2, title: "Undated", year: nil),
+            try makeItem(instanceID: 3, title: "Later", year: 2001),
+        ])
+
+        // A blank year column at the top of the list reads like the sort failed, so the yearless
+        // record belongs at the end whichever way the years run.
+        for direction in SortDirection.allCases {
+            let titles = try await store.items(sortedBy: .year, direction: direction).map(\.title)
+            #expect(titles.last == "Undated", "yearless record must sort last when \(direction.rawValue)")
+        }
+
+        let ascending = try await store.items(sortedBy: .year, direction: .ascending).map(\.title)
+        #expect(ascending == ["Dated", "Later", "Undated"])
+        let descending = try await store.items(sortedBy: .year, direction: .descending).map(\.title)
+        #expect(descending == ["Later", "Dated", "Undated"])
+    }
+
     @Test("Upsert inserts new copies and flattens basic_information")
     func upsertInserts() async throws {
         let store = try makeStore()

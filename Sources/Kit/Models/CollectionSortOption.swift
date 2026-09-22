@@ -57,8 +57,13 @@ enum CollectionSortOption: String, CaseIterable, Identifiable, Sendable {
         case .title:
             return [SortDescriptor(\.sortTitle, order: order), SortDescriptor(\.sortArtist)]
         case .year:
-            // Items with no year sort together; the artist key keeps that group stable.
-            return [SortDescriptor(\.year, order: order), SortDescriptor(\.sortArtist)]
+            // Rank first, so records Discogs has no year for land after every dated one in both
+            // directions. The artist key keeps that group stable.
+            return [
+                SortDescriptor(\.yearRank),
+                SortDescriptor(\.year, order: order),
+                SortDescriptor(\.sortArtist),
+            ]
         }
     }
 }
