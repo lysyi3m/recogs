@@ -59,6 +59,10 @@ struct RecogsApp: App {
         // bar that `WindowGroup` brings with it, neither of which means anything here.
         Window("Recogs", id: "collection") {
             rootView
+                // Below this the status bar runs out of room and the record count collides with
+                // the sync state: the density control, the centred count and the status need
+                // roughly 500pt between them before anything overlaps.
+                .frame(minWidth: 560, minHeight: 420)
         }
         .defaultSize(width: 1100, height: 760)
         .commands {
