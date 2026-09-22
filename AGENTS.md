@@ -22,6 +22,10 @@ contradicts a rule here, the repo-specific rule wins — and say so when you not
   A test that needs any of those belongs somewhere else.
 - **Secrets never enter the repo.** No tokens, keys or Team IDs in tracked files. Each repo
   states where its own secrets live.
+- **Signing reads `.env`.** Set `DEVELOPMENT_TEAM` in `.env` (copy `.env.example`).
+  `make generate` projects it into the git-ignored `Config/Local.xcconfig`, which
+  `Config/Base.xcconfig` includes, so `xcodebuild` and ⌘R sign with the same team. Never pass
+  the team on the command line or commit it.
 - **One word per concept.** The Terminology section is binding for UI strings, code
   identifiers and docs alike. Do not introduce synonyms for variety.
 
@@ -72,9 +76,6 @@ commit `.env`.
 
 ## Housekeeping
 
-- **Signing.** `make generate` projects `DEVELOPMENT_TEAM` from `.env` into
-  `Config/Local.xcconfig`, which `Config/Base.xcconfig` includes optionally. That one file
-  serves both `xcodebuild` and a plain ⌘R in Xcode. Copy `.env.example` to start.
 - **A green build does not prove the change shipped.** A changed default argument in
   `DiscogsKit` rebuilds the package but not its callers, because the default is materialised at
   the call site. Verify the installed binary with `Scripts/verify-installed.sh <udid>`.
