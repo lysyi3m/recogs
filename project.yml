@@ -67,6 +67,17 @@ targets:
         NSHumanReadableCopyright: "© 2026 Emil Kashkevich · MIT License"
         ITSAppUsesNonExemptEncryption: false
         UILaunchScreen: {}
+        # Ignored on macOS. Without these an iOS Release build warns, and the app would inherit
+        # whatever the toolchain defaults to rather than what it was designed for.
+        UISupportedInterfaceOrientations~iphone:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
     entitlements:
       path: Config/Recogs.entitlements
       properties:

@@ -22,6 +22,9 @@ struct CoverImageView: View {
     let edge: CGFloat
 
     @Environment(AppServices.self) private var services
+    /// The scale of the display actually showing this view. `UIScreen.main` assumed one screen and
+    /// is deprecated; this follows the window the cover is drawn in.
+    @Environment(\.displayScale) private var displayScale
     @State private var image: PlatformImage?
     @State private var didFail = false
 
@@ -67,12 +70,11 @@ struct CoverImageView: View {
             return
         }
         do {
-            let scale = PlatformScreenScale.value
             image = try await services.imageCache.image(
                 releaseID: releaseID,
                 kind: kind,
                 remoteURL: url,
-                maximumPixelSize: bucketedEdge * scale
+                maximumPixelSize: bucketedEdge * displayScale
             )
             didFail = false
         } catch is CancellationError {
@@ -80,16 +82,5 @@ struct CoverImageView: View {
         } catch {
             didFail = true
         }
-    }
-}
-
-enum PlatformScreenScale {
-    @MainActor
-    static var value: CGFloat {
-        #if canImport(UIKit)
-        UIScreen.main.scale
-        #else
-        NSScreen.main?.backingScaleFactor ?? 2
-        #endif
     }
 }

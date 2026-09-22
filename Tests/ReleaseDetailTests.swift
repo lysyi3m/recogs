@@ -73,7 +73,7 @@ struct ReleaseDetailTests {
         #expect(cached.title == "New Title")
     }
 
-    @Test("Two copies of one pressing share a single detail record")
+    @Test("Two copies of one release share a single detail record")
     func sharedAcrossInstances() async throws {
         let store = try makeStore()
         try await store.upsertReleaseDetail(makeRelease(id: 500))

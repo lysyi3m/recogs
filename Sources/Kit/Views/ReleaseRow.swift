@@ -82,7 +82,7 @@ extension View {
 extension ReleaseRow {
     /// Joins the parts that are present, dropping the empties, so a missing label never leaves a
     /// stray separator behind.
-    static func details(_ parts: [String?]) -> String {
+    nonisolated static func details(_ parts: [String?]) -> String {
         parts.compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
     }
 }
