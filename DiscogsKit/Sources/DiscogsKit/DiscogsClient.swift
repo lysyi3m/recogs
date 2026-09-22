@@ -80,6 +80,12 @@ public struct DiscogsClient: Sendable {
 
     /// Streams the collection page by page, so a caller can render progressively during the first
     /// sync instead of waiting for the whole collection.
+    ///
+    /// - Important: `AsyncThrowingStream` answers cancellation by finishing, not by throwing. A
+    ///   `for try await` over this stream therefore ends normally when the consuming task is
+    ///   cancelled, having yielded however many pages it managed — which is indistinguishable from
+    ///   a collection that really is that size. Every consumer must call `Task.checkCancellation()`
+    ///   **after** the loop before treating the result as the whole collection.
     public func collectionPages(
         user: String,
         folderID: Int = DiscogsFolder.all,
@@ -128,6 +134,9 @@ public struct DiscogsClient: Sendable {
         ) {
             items.append(contentsOf: page.releases)
         }
+        // A cancelled stream finishes rather than throwing, so without this a caller would be
+        // handed a short list as though it were the whole collection.
+        try Task.checkCancellation()
         return items
     }
 
