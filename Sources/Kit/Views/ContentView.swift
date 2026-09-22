@@ -234,6 +234,7 @@ public struct ContentView: View {
     }
 
     private var barContents: some View {
+        #if os(macOS)
         HStack(spacing: 12) {
             // The density control belongs to the grid, so it goes away on the detail screen.
             if selection == nil { densityControls }
@@ -243,15 +244,33 @@ public struct ContentView: View {
         // Overlaid rather than placed between the two, so it centres on the bar itself and does
         // not drift as the status text changes length.
         .overlay {
-            if selection == nil {
-                countLabel
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
-            }
+            if selection == nil { count }
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .frame(minHeight: 28)
+        #else
+        // A phone has no room for a centred overlay: it lands on top of the density control. The
+        // count sits in the row instead, and loses out to the status if space runs short.
+        HStack(spacing: 10) {
+            if selection == nil {
+                densityControls
+                count.layoutPriority(-1)
+            }
+            Spacer(minLength: 8)
+            syncStatus
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .frame(minHeight: 28)
+        #endif
+    }
+
+    private var count: some View {
+        countLabel
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
     }
 
     /// Reads as a plain count normally, and says how much of the collection is showing while a
@@ -274,11 +293,19 @@ public struct ContentView: View {
         HStack(spacing: 8) {
             Image(systemName: "square.grid.3x3.fill").imageScale(.small)
             Slider(value: $itemWidth, in: 60...260)
-                .frame(width: 140)
+                .frame(width: sliderWidth)
                 .controlSize(.small)
             Image(systemName: "square.fill").imageScale(.small)
         }
         .foregroundStyle(.secondary)
+    }
+
+    private var sliderWidth: CGFloat {
+        #if os(macOS)
+        140
+        #else
+        96
+        #endif
     }
 
     /// Always says something: a sync in flight, a problem, or when it last worked.
