@@ -65,7 +65,7 @@ final class SyncController {
             case .noToken:
                 return "No Discogs token."
             case .unreachable(let reason):
-                return "Nothing was deleted: \(reason)"
+                return "Nothing was deleted. \(reason)"
             }
         }
     }

@@ -110,7 +110,7 @@ struct AddRecordView: View {
         guard !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         // Never fail silently: an unreachable client looks exactly like a search that did nothing.
         guard let search else {
-            noTokenMessage = "No Discogs token. Add one in the collection screen first."
+            noTokenMessage = "No Discogs token."
             return
         }
         noTokenMessage = nil
@@ -133,7 +133,7 @@ struct AddRecordView: View {
             ContentUnavailableView(
                 "Find a Record",
                 systemImage: "magnifyingglass",
-                description: Text("Search Discogs, then pick the exact pressing you own.")
+                description: Text("Search Discogs for the pressing you own.")
             )
         case .searching:
             ProgressView()
@@ -149,7 +149,7 @@ struct AddRecordView: View {
         case .loaded(let total) where results.isEmpty:
             ContentUnavailableView.search(text: query)
                 .overlay(alignment: .bottom) {
-                    if total > 0 { Text("\(total) matches, none shown").font(.footnote) }
+                    if total > 0 { Text("No matches shown").font(.footnote) }
                 }
         case .loaded(let total):
             List {
@@ -163,7 +163,7 @@ struct AddRecordView: View {
                     }
                 } footer: {
                     if total > results.count {
-                        Text("Showing \(results.count) of \(total) matches. Narrow the search to see others.")
+                        Text("Showing \(results.count) of \(total) matches.")
                     }
                 }
             }

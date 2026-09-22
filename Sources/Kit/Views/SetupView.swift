@@ -135,7 +135,7 @@ struct SetupView: View {
                 }
                 .font(.footnote.weight(.medium))
 
-                Text("Stored in the Keychain on this device, and never sent anywhere but Discogs.")
+                Text("Stored in the Keychain on this device.")
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .multilineTextAlignment(.center)
@@ -190,10 +190,10 @@ struct SetupView: View {
     private func message(for error: any Error) -> String {
         guard let discogsError = error as? DiscogsError else { return error.localizedDescription }
         if discogsError.isUnauthorized {
-            return "Discogs did not accept that token. Check you copied all of it, and that it has not been revoked."
+            return "Discogs didn't accept that token."
         }
         if discogsError.isOffline {
-            return "No connection to Discogs. Check your network and try again."
+            return "No connection to Discogs."
         }
         return discogsError.localizedDescription
     }

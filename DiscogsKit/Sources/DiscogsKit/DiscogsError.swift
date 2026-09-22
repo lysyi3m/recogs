@@ -49,20 +49,20 @@ extension DiscogsError: LocalizedError {
             return message ?? "Not found."
         case .rateLimited(let retryAfter):
             if let retryAfter {
-                return "Rate limited by Discogs. Retry in \(Int(retryAfter.rounded()))s."
+                return "Rate limited by Discogs. Try again in \(Int(retryAfter.rounded()))s."
             }
             return "Rate limited by Discogs."
         case .http(let status, let message):
             return message ?? "Discogs returned HTTP \(status)."
         case .decoding:
-            return "Could not decode the Discogs response."
+            return "Couldn't read the Discogs response."
         case .transport:
             return isOffline
-                ? "No connection to Discogs. Your collection is still browsable from this device."
-                : "Could not reach Discogs."
+                ? "No connection to Discogs."
+                : "Couldn't reach Discogs."
 
         case .invalidURL:
-            return "Could not build a valid request URL."
+            return "Invalid request URL."
         }
     }
 }

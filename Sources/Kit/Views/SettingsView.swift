@@ -69,7 +69,7 @@ struct CollectionSettingsView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("Clears the collection and covers stored on this device, then downloads them again. Nothing in your Discogs collection changes.")
+                Text("Downloads the collection again. Your Discogs collection is unchanged.")
             }
     }
 
@@ -148,9 +148,9 @@ struct CollectionSettingsView: View {
         if let errorMessage = syncController.errorMessage {
             message = errorMessage
         } else if syncController.isOffline {
-            message = "Offline — nothing synced"
+            message = "Offline"
         } else {
-            message = "Sync finished"
+            message = "Synced"
         }
         await refreshSummary()
     }
@@ -195,7 +195,7 @@ struct AccountSettingsView: View {
                 Button("Disconnect", role: .destructive) { Task { await signOut() } }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("Removes the token from this device and clears the cached collection. Nothing in your Discogs collection changes.")
+                Text("Removes the token and cached collection from this device. Your Discogs collection is unchanged.")
             }
     }
 
@@ -226,7 +226,7 @@ struct AccountSettingsView: View {
                 Text(errorMessage).font(.footnote).foregroundStyle(.red)
             }
         } footer: {
-            Text("The token is stored in the Keychain on this device only, and is never logged.")
+            Text("Stored in the Keychain on this device.")
         }
     }
 

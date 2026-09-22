@@ -26,8 +26,8 @@ actor CollectionSyncer {
 
         var errorDescription: String? {
             switch self {
-            case .incompleteCollection(let seen, let expected):
-                return "Sync incomplete — Discogs reported \(expected) records but sent \(seen). Nothing was removed."
+            case .incompleteCollection:
+                return "Sync incomplete. Nothing was removed."
             }
         }
     }

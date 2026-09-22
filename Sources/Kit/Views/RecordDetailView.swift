@@ -63,7 +63,7 @@ struct RecordDetailView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("\(item.artistName) — \(item.title)\nThis removes the copy from Discogs. Other copies of the same release are unaffected.")
+            Text("\(item.artistName) — \(item.title)\nThis removes the copy from Discogs.")
         }
         .collectionFailureAlert(editor)
     }
@@ -268,7 +268,7 @@ struct RecordDetailView: View {
                 }
             }
         case .loaded:
-            Text("Discogs lists no tracks for this release.")
+            Text("No tracklist on Discogs.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         case .failed(let message):
@@ -279,7 +279,7 @@ struct RecordDetailView: View {
                 }
             }
         case .loading, nil:
-            Text("Fetching from Discogs…")
+            Text("Loading…")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }

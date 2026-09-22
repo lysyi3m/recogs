@@ -36,10 +36,10 @@ struct ErrorClassificationTests {
         #expect(!unauthorized.isRateLimited)
     }
 
-    @Test("Offline says the cache still works, rather than showing a raw URLError")
+    @Test("Offline reads as a plain message rather than a raw URLError")
     func offlineMessage() throws {
         let message = try #require(DiscogsError.transport(underlying: URLError(.notConnectedToInternet)).errorDescription)
-        #expect(message.contains("browsable"))
+        #expect(message == "No connection to Discogs.")
     }
 
     @Test("A rate-limit message names the wait")

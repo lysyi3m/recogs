@@ -112,7 +112,7 @@ public struct ContentView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: { item in
-            Text("\(item.artistName) — \(item.title)\nThis removes the copy from Discogs. Other copies of the same release are unaffected.")
+            Text("\(item.artistName) — \(item.title)\nThis removes the copy from Discogs.")
         }
         .collectionFailureAlert(editor)
     }
@@ -130,9 +130,9 @@ public struct ContentView: View {
             }
         } else if allItems.isEmpty {
             ContentUnavailableView {
-                Label("No Records Yet", systemImage: "square.stack")
+                Label("No Records", systemImage: "square.stack")
             } description: {
-                Text("Sync to pull your Discogs collection onto this device.")
+                Text("Sync to download your Discogs collection.")
             } actions: {
                 Button("Sync Now") { Task { await syncController.sync() } }
                     .disabled(syncController.isSyncing)
@@ -231,14 +231,14 @@ public struct ContentView: View {
         }
         if syncController.isSyncing { return "Syncing…" }
         if let errorMessage = editor?.errorMessage ?? syncController.errorMessage { return errorMessage }
-        if syncController.isOffline { return "Offline — showing cached collection" }
+        if syncController.isOffline { return "Offline" }
         guard let lastSyncedAt = syncController.lastSyncedAt else { return "Not synced yet" }
         return "Updated \(lastSyncedAt.formatted(.relative(presentation: .named)))"
     }
     #endif
 
     private var initialSyncStatus: String {
-        guard let progress = syncController.progress else { return "Fetching your collection…" }
+        guard let progress = syncController.progress else { return "Fetching collection…" }
         return "\(progress.itemsFetched) of \(progress.totalItems) records"
     }
 
@@ -337,7 +337,7 @@ public struct ContentView: View {
                 .truncationMode(.tail)
                 .help(errorMessage)
         } else if syncController.isOffline {
-            Label("Offline — showing cached collection", systemImage: "wifi.slash")
+            Label("Offline", systemImage: "wifi.slash")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
