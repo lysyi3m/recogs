@@ -97,13 +97,14 @@ public struct ContentView: View {
             // On-launch delta, skipped when a sync ran moments ago.
             if syncController.shouldSyncOnLaunch { await syncController.sync() }
         }
-        .confirmationDialog(
+        // Matches the record page: raised from a context menu, a confirmation dialog is presented
+        // as a popover anchored to that menu and inherits its width.
+        .alert(
             "Remove this copy?",
             isPresented: Binding(
                 get: { pendingRemoval != nil },
                 set: { if !$0 { pendingRemoval = nil } }
             ),
-            titleVisibility: .visible,
             presenting: pendingRemoval
         ) { item in
             Button("Remove from Collection", role: .destructive) {

@@ -49,10 +49,12 @@ struct RecordDetailView: View {
             // Tracklist, notes and country arrive together; one fetch covers the page.
             await loader.load(releaseID: item.releaseID)
         }
-        .confirmationDialog(
+        // An alert rather than a confirmation dialog: raised from the toolbar menu, a dialog is
+        // presented as a popover anchored to that menu and inherits its width, which crams the
+        // message into a few words per line and hides the cancel button behind a tap outside.
+        .alert(
             "Remove this copy?",
-            isPresented: $isConfirmingRemoval,
-            titleVisibility: .visible
+            isPresented: $isConfirmingRemoval
         ) {
             Button("Remove from Collection", role: .destructive) {
                 Task {
