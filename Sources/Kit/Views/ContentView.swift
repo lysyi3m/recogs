@@ -44,6 +44,9 @@ public struct ContentView: View {
                 .navigationTitle(services.hasToken ? "Collection" : "")
                 #if os(iOS)
                 .navigationBarTitleDisplayMode(services.hasToken ? .large : .inline)
+                // Where iOS puts sync state, the way Mail does. The phone has no status bar of its
+                // own, and a failed refresh is not worth an alert: the cache is still browsable.
+                .navigationSubtitle(syncSubtitle)
                 #endif
                 .toolbar { toolbarContent }
                 // Filters the cached collection as you type; the add sheet is what searches
@@ -216,6 +219,21 @@ public struct ContentView: View {
             }
         }
     }
+
+    #if os(iOS)
+    /// The same reading as the macOS status bar: a sync in flight, a problem, or when it last worked.
+    private var syncSubtitle: String {
+        guard services.hasToken else { return "" }
+        if let progress = syncController.progress {
+            return "Syncing \(progress.itemsFetched) of \(progress.totalItems)"
+        }
+        if syncController.isSyncing { return "Syncing…" }
+        if let errorMessage = editor?.errorMessage ?? syncController.errorMessage { return errorMessage }
+        if syncController.isOffline { return "Offline — showing cached collection" }
+        guard let lastSyncedAt = syncController.lastSyncedAt else { return "Not synced yet" }
+        return "Updated \(lastSyncedAt.formatted(.relative(presentation: .named)))"
+    }
+    #endif
 
     private var initialSyncStatus: String {
         guard let progress = syncController.progress else { return "Fetching your collection…" }
