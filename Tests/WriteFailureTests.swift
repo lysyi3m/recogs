@@ -17,11 +17,16 @@ struct WriteFailureTests {
         nonisolated(unsafe) static var failureStatus = 403
         private static let lock = NSLock()
 
+        /// When true, the collection endpoint fails, so a reconciliation sync cannot run.
+        nonisolated(unsafe) static var failReads = false
+
         static func reset(failureStatus: Int = 403, writesToFail: Int = 1) {
             lock.withLock {
                 writeAttempts = 0
                 self.failureStatus = failureStatus
                 self.writesToFail = writesToFail
+                collectionInstanceIDs = []
+                failReads = false
             }
         }
 
@@ -30,6 +35,10 @@ struct WriteFailureTests {
         }
 
         override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+        /// The copies the collection holds when a reconciliation sync asks. Set per test to model
+        /// "the write landed" or "the write did not".
+        nonisolated(unsafe) static var collectionInstanceIDs: [Int] = []
 
         override func startLoading() {
             let isWrite = request.httpMethod == "DELETE" || request.httpMethod == "POST"
@@ -45,6 +54,27 @@ struct WriteFailureTests {
                 }
                 status = shouldFail ? Self.lock.withLock({ Self.failureStatus }) : 204
                 body = shouldFail ? #"{"message":"Nope."}"# : ""
+            } else if request.url?.path.hasSuffix("/collection/folders") == true {
+                status = 200
+                body = #"{"folders":[{"id":1,"name":"Uncategorized","count":0}]}"#
+            } else if Self.lock.withLock({ Self.failReads }) {
+                status = 500
+                body = #"{"message":"Nope."}"#
+            } else if request.url?.path.contains("/collection/folders/") == true {
+                let ids = Self.lock.withLock { Self.collectionInstanceIDs }
+                let releases = ids.map { id in
+                    """
+                    {"id":500,"instance_id":\(id),"folder_id":1,"rating":0,
+                     "basic_information":{"id":500,"title":"Remain In Light","year":1980,
+                     "artists":[{"name":"Talking Heads","join":""}],
+                     "labels":[],"formats":[],"genres":[],"styles":[]}}
+                    """
+                }
+                status = 200
+                body = """
+                {"pagination":{"page":1,"pages":1,"per_page":100,"items":\(ids.count)},
+                 "releases":[\(releases.joined(separator: ","))]}
+                """
             } else {
                 status = 200
                 body = "{}"
@@ -86,6 +116,56 @@ struct WriteFailureTests {
         return try DiscogsClient.makeDecoder().decode(CollectionItem.self, from: Data(json.utf8))
     }
 
+    private func makeSearchResult(releaseID: Int = 500) throws -> SearchResult {
+        let json = """
+        {
+          "id": \(releaseID), "title": "Talking Heads - Remain In Light", "year": "1980",
+          "thumb": "https://i.discogs.com/thumb.jpeg",
+          "cover_image": "https://i.discogs.com/cover.jpeg",
+          "format": ["Vinyl"], "label": ["Sire"], "catno": "SRK 6095", "country": "US"
+        }
+        """
+        return try DiscogsClient.makeDecoder().decode(SearchResult.self, from: Data(json.utf8))
+    }
+
+    @Test("An unconfirmed add that did land is recognised, even when a copy was already owned")
+    func unconfirmedAddThatLandedIsRecognised() async throws {
+        FlakyProtocol.reset(failureStatus: 503, writesToFail: .max)
+        // Owned one copy before; Discogs ends up holding two, so the write did land.
+        FlakyProtocol.collectionInstanceIDs = [111, 222]
+        URLProtocol.registerClass(FlakyProtocol.self)
+        defer { URLProtocol.unregisterClass(FlakyProtocol.self) }
+
+        let (services, tokenStore) = try makeServices()
+        defer { try? tokenStore.delete() }
+        try await services.store.upsert([try makeItem(instanceID: 111)])
+
+        let editor = services.makeEditor()
+        #expect(await editor.add(try makeSearchResult()) == true)
+        #expect(editor.failure == nil)
+        #expect(try await services.store.itemCount() == 2)
+    }
+
+    @Test("An unconfirmed add that did not land is reported, not mistaken for a copy already owned")
+    func unconfirmedAddThatDidNotLandIsReported() async throws {
+        FlakyProtocol.reset(failureStatus: 503, writesToFail: .max)
+        // Owned one copy before, and Discogs still holds exactly that one: the write was rejected.
+        FlakyProtocol.collectionInstanceIDs = [111]
+        URLProtocol.registerClass(FlakyProtocol.self)
+        defer { URLProtocol.unregisterClass(FlakyProtocol.self) }
+
+        let (services, tokenStore) = try makeServices()
+        defer { try? tokenStore.delete() }
+        try await services.store.upsert([try makeItem(instanceID: 111)])
+
+        let editor = services.makeEditor()
+        // Finding the release present proves nothing here — it was present before the add.
+        #expect(await editor.add(try makeSearchResult()) == false)
+        let failure = try #require(editor.failure)
+        #expect(failure.retry != nil, "verified absent, so a retry is safe")
+        #expect(try await services.store.itemCount() == 1)
+    }
+
     @Test("A removal Discogs has already applied is not undone")
     func removeOfMissingCopyIsSuccess() async throws {
         FlakyProtocol.reset(failureStatus: 404)
@@ -104,10 +184,11 @@ struct WriteFailureTests {
         #expect(editor.failure == nil)
     }
 
-    @Test("An unconfirmed removal is not rolled back, and offers no retry")
-    func unconfirmedRemoveIsNotRolledBack() async throws {
-        // 503 after the retries: the delete may well have been applied before it failed.
+    @Test("An unconfirmed removal Discogs did not apply is restored, with a retry")
+    func unconfirmedRemoveStillUpstream() async throws {
         FlakyProtocol.reset(failureStatus: 503, writesToFail: .max)
+        // Discogs still holds the copy, so the delete did not land after all.
+        FlakyProtocol.collectionInstanceIDs = [111]
         URLProtocol.registerClass(FlakyProtocol.self)
         defer { URLProtocol.unregisterClass(FlakyProtocol.self) }
 
@@ -118,7 +199,27 @@ struct WriteFailureTests {
         let editor = services.makeEditor()
         #expect(await editor.remove(instanceID: 111) == false)
         let failure = try #require(editor.failure)
-        #expect(failure.retry == nil, "retrying an unconfirmed write can duplicate or mislead")
+        #expect(failure.retry != nil, "verified still present, so a retry is safe")
+        #expect(try await services.store.itemCount() == 1, "the sync brings the copy back")
+    }
+
+    @Test("A removal that cannot be verified offers no retry")
+    func unconfirmedRemoveWithNoWayToVerify() async throws {
+        FlakyProtocol.reset(failureStatus: 503, writesToFail: .max)
+        // The reconciliation sync cannot run either, so the outcome stays genuinely unknown.
+        FlakyProtocol.failReads = true
+        URLProtocol.registerClass(FlakyProtocol.self)
+        defer { URLProtocol.unregisterClass(FlakyProtocol.self) }
+
+        let (services, tokenStore) = try makeServices()
+        defer { try? tokenStore.delete() }
+        try await services.store.upsert([try makeItem(instanceID: 111)])
+
+        let editor = services.makeEditor()
+        #expect(await editor.remove(instanceID: 111) == false)
+        let failure = try #require(editor.failure)
+        #expect(failure.retry == nil, "retrying an unverifiable write can mislead")
+        #expect(failure.message.contains("may or may not"))
     }
 
     @Test("A rejected removal offers a retry that actually removes the copy")

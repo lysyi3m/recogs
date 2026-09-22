@@ -60,6 +60,10 @@ final class CollectionEditor {
             )
         }
 
+        // Captured before the write: an ambiguous outcome is settled by looking for a copy that
+        // was not there before, which is the only evidence that this add is the one that landed.
+        let copiesBefore = (try? await services.store.instanceIDs(ofRelease: result.id)) ?? []
+
         let provisionalID = PendingAddition.provisionalInstanceID()
         let pending = PendingAddition(from: result, instanceID: provisionalID, folderID: folderID)
 
@@ -90,7 +94,7 @@ final class CollectionEditor {
                 rejected(error)
                 return false
             }
-            return await reconcileAdd(of: result, after: error)
+            return await reconcileAdd(of: result, knownCopies: copiesBefore, after: error)
         }
 
         do {
@@ -174,9 +178,12 @@ final class CollectionEditor {
     /// A sync is authoritative: it reconciles the whole folder by `instance_id`. If it cannot run —
     /// offline, most likely — the outcome stays genuinely unknown, and saying so is better than
     /// offering a retry that might duplicate the copy.
-    private func reconcileAdd(of result: SearchResult, after error: any Error) async -> Bool {
-        await services.syncController.sync()
-        guard syncSucceeded else {
+    private func reconcileAdd(
+        of result: SearchResult,
+        knownCopies: Set<Int>,
+        after error: any Error
+    ) async -> Bool {
+        guard await services.syncController.syncAfterWrite() else {
             failure = Failure(
                 title: "Couldn't confirm the add",
                 message: "\(result.title) may or may not have been added. Sync when you are back online to find out.",
@@ -184,7 +191,10 @@ final class CollectionEditor {
             )
             return false
         }
-        if (try? await services.store.containsRelease(result.id)) == true { return true }
+        let copiesNow = (try? await services.store.instanceIDs(ofRelease: result.id)) ?? []
+        // A copy that was not there before this write is the add that landed. Merely finding the
+        // release is not evidence: the user may have owned one all along.
+        if copiesNow.subtracting(knownCopies).isEmpty == false { return true }
         // Verified absent, so a retry is safe to offer.
         failure = Failure(
             title: "Couldn't add \(result.title)",
@@ -195,8 +205,7 @@ final class CollectionEditor {
     }
 
     private func reconcileRemove(of snapshot: CollectionItemSnapshot, after error: any Error) async -> Bool {
-        await services.syncController.sync()
-        guard syncSucceeded else {
+        guard await services.syncController.syncAfterWrite() else {
             failure = Failure(
                 title: "Couldn't confirm the removal",
                 message: "\(snapshot.title) may or may not have been removed. Sync when you are back online to find out.",
@@ -214,9 +223,6 @@ final class CollectionEditor {
         return false
     }
 
-    private var syncSucceeded: Bool {
-        services.syncController.errorMessage == nil && !services.syncController.isOffline
-    }
 
     /// Best-effort accuracy pass. A failure here leaves the copy added with search-derived text,
     /// which the next full sync corrects anyway.

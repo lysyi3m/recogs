@@ -22,7 +22,7 @@ final class SyncController {
     private unowned let services: AppServices
     /// The sync currently in flight, so work tied to the account can be stopped before the account
     /// goes away. Held because `runSync` deliberately shields the work from its caller.
-    private var running: Task<Void, Never>?
+    private var running: Task<Bool, Never>?
     /// Cover downloads, which outlive the sync that scheduled them. Tracked so sign-out can stop
     /// them: they write files for whichever account asked for them.
     private var warmingArtwork: Task<Void, Never>?
@@ -41,8 +41,9 @@ final class SyncController {
     }
 
     /// Runs a full refresh. Concurrent calls are ignored, so pull-to-refresh cannot stack syncs.
-    func sync() async {
-        guard !isSyncing else { return }
+    @discardableResult
+    func sync() async -> Bool {
+        guard !isSyncing else { return false }
         isSyncing = true
         activity = "Syncing…"
         defer {
@@ -50,7 +51,19 @@ final class SyncController {
             activity = nil
             progress = nil
         }
-        await runSync()
+        return await runSync()
+    }
+
+    /// Runs a sync that is guaranteed to have started *after* this call, and reports whether it
+    /// finished successfully.
+    ///
+    /// `sync()` returns immediately when one is already in flight, which is fine for a refresh but
+    /// useless for settling a write: that sync began before the write and cannot have seen it.
+    /// Reading `errorMessage` afterwards is worse still, because the in-flight sync may have set
+    /// it. Waiting for the current one and then running a fresh one is the only honest answer.
+    func syncAfterWrite() async -> Bool {
+        if let running { _ = await running.value }
+        return await sync()
     }
 
     /// Runs a sync in a task of its own, so whoever asked for it cannot cancel it half-done.
@@ -59,11 +72,12 @@ final class SyncController {
     /// fetch that is cancelled mid-stream returns no pages at all. A refresh the user asked for is
     /// worth finishing. The task is kept so `cancelAndWait` can still stop it deliberately — being
     /// shielded from the caller is not the same as being unstoppable.
-    private func runSync() async {
+    private func runSync() async -> Bool {
         let task = Task { await self.performSync() }
         running = task
-        await task.value
+        let succeeded = await task.value
         running = nil
+        return succeeded
     }
 
     /// Stops any sync in flight and waits for it to finish unwinding.
@@ -75,7 +89,7 @@ final class SyncController {
         warmingArtwork?.cancel()
         running?.cancel()
         await warmingArtwork?.value
-        await running?.value
+        _ = await running?.value
         warmingArtwork = nil
     }
 
@@ -125,14 +139,14 @@ final class SyncController {
         activity = "Downloading collection…"
         // A failure here leaves an empty cache, so it is reported even when the cause is simply
         // being offline.
-        await runSync()
+        _ = await runSync()
         // On the collection screen being offline is a status line, not a failure: the cache is
         // intact and still browsable.
         if isOffline { errorMessage = nil }
     }
 
-    private func performSync() async {
-        guard let syncer = services.makeSyncer() else { return }
+    private func performSync() async -> Bool {
+        guard let syncer = services.makeSyncer() else { return false }
         errorMessage = nil
 
         do {
@@ -146,15 +160,32 @@ final class SyncController {
 
             // The collection is correct now. Covers are a pre-fetch — the grid loads what it shows
             // on demand — so they warm in the background rather than holding the sync open.
-            warmingArtwork?.cancel()
-            warmingArtwork = Task { await syncer.warmArtwork(summary.artwork) }
+            await startWarmingArtwork(summary.artwork, using: syncer)
+            return true
         } catch is CancellationError {
             // The caller went away; not a failure worth surfacing.
+            return false
         } catch {
             isOffline = (error as? DiscogsError)?.isOffline ?? false
             // Always recorded here. Callers for which being offline is merely a status clear it;
             // callers that have already destroyed something must not.
             errorMessage = error.localizedDescription
+            return false
         }
+    }
+
+    /// Replaces the previous warmer, draining it first so its downloads cannot outlive it.
+    ///
+    /// Dropping the reference without awaiting would leave an untracked task still writing image
+    /// files — which is exactly what sign-out and Reset Cache need not to happen.
+    private func startWarmingArtwork(
+        _ targets: [CollectionSyncer.ArtworkTarget],
+        using syncer: CollectionSyncer
+    ) async {
+        if let previous = warmingArtwork {
+            previous.cancel()
+            await previous.value
+        }
+        warmingArtwork = Task { await syncer.warmArtwork(targets) }
     }
 }

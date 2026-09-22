@@ -24,13 +24,15 @@ actor CollectionStore {
         return try modelContext.fetch(descriptor).map(\.snapshot)
     }
 
-    /// Whether any copy of this release is in the collection, for settling an unconfirmed add.
-    func containsRelease(_ releaseID: Int) throws -> Bool {
-        var descriptor = FetchDescriptor<CachedCollectionItem>(
+    /// Every copy of this release the collection holds, for settling an unconfirmed add.
+    ///
+    /// Owning a copy already is normal — that is what `instance_id` exists for — so "is this
+    /// release present" cannot answer whether *another* one was just added. The set of copies can.
+    func instanceIDs(ofRelease releaseID: Int) throws -> Set<Int> {
+        let descriptor = FetchDescriptor<CachedCollectionItem>(
             predicate: #Predicate { $0.releaseID == releaseID }
         )
-        descriptor.fetchLimit = 1
-        return try modelContext.fetch(descriptor).isEmpty == false
+        return Set(try modelContext.fetch(descriptor).map(\.instanceID))
     }
 
     func item(instanceID: Int) throws -> CollectionItemSnapshot? {
