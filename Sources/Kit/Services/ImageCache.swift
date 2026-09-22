@@ -53,15 +53,59 @@ actor ImageCache {
         session: URLSession = .shared,
         maximumConcurrentDownloads: Int = 6
     ) {
-        self.directory = directory ?? Self.defaultDirectory()
+        let resolved = directory ?? Self.defaultDirectory()
+        if directory == nil { Self.migrateFromCachesDirectory(into: resolved) }
+        self.directory = resolved
         self.session = session
         self.maximumConcurrentDownloads = max(maximumConcurrentDownloads, 1)
     }
 
+    /// Application Support, not Caches.
+    ///
+    /// The collection is meant to stay browsable offline, and a wall of placeholder tiles is not
+    /// browsable. `Library/Caches` is purgeable by definition — the system may reclaim it whenever
+    /// it likes, which is exactly when an offline user would notice. The art is regenerable in
+    /// principle but not while the device has no network, so it belongs in Application Support,
+    /// excluded from backup because it can always be downloaded again.
     static func defaultDirectory() -> URL {
-        let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? URL.temporaryDirectory
         return base.appending(path: "Recogs/Images", directoryHint: .isDirectory)
+    }
+
+    /// Moves art left behind in the old Caches location, so an upgrade does not silently re-download
+    /// every cover. Runs once: the old directory is gone afterwards.
+    static func migrateFromCachesDirectory(into directory: URL) {
+        let manager = FileManager.default
+        guard let caches = manager.urls(for: .cachesDirectory, in: .userDomainMask).first else { return }
+        let legacy = caches.appending(path: "Recogs/Images", directoryHint: .isDirectory)
+        guard manager.fileExists(atPath: legacy.path) else { return }
+
+        if manager.fileExists(atPath: directory.path) {
+            // Both exist, so merge rather than clobber what is already in the new location.
+            let contents = (try? manager.contentsOfDirectory(at: legacy, includingPropertiesForKeys: nil)) ?? []
+            for kind in contents {
+                let destination = directory.appending(path: kind.lastPathComponent, directoryHint: .isDirectory)
+                try? manager.createDirectory(at: destination, withIntermediateDirectories: true)
+                let files = (try? manager.contentsOfDirectory(at: kind, includingPropertiesForKeys: nil)) ?? []
+                for file in files {
+                    try? manager.moveItem(at: file, to: destination.appending(path: file.lastPathComponent))
+                }
+            }
+            try? manager.removeItem(at: legacy)
+        } else {
+            try? manager.createDirectory(at: directory.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? manager.moveItem(at: legacy, to: directory)
+        }
+    }
+
+    /// Keeps the art out of iCloud and iTunes backups. It is several megabytes of data Discogs can
+    /// serve again, so backing it up wastes the user's storage rather than protecting anything.
+    private func excludeFromBackup() {
+        var url = directory
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? url.setResourceValues(values)
     }
 
     func fileURL(releaseID: Int, kind: Kind) -> URL {
@@ -158,6 +202,7 @@ actor ImageCache {
             at: destination.deletingLastPathComponent(),
             withIntermediateDirectories: true
         )
+        excludeFromBackup()
         // Write via a temporary file so an interrupted download never leaves a truncated image
         // that the cache would then treat as complete and never re-fetch.
         let temporary = destination.deletingLastPathComponent()

@@ -4,6 +4,33 @@ import Testing
 
 @Suite("ImageCache")
 struct ImageCacheTests {
+    @Test("The default directory is durable, not the purgeable caches directory")
+    func defaultDirectoryIsApplicationSupport() {
+        let directory = ImageCache.defaultDirectory()
+        // Library/Caches is purgeable by definition. Cover art living there means an offline user
+        // can open the app to a wall of placeholders with no way to get the art back.
+        #expect(directory.path.contains("Application Support"))
+        #expect(directory.path.contains("/Caches/") == false)
+    }
+
+    @Test("Art left in the old caches directory is moved, not re-downloaded")
+    func migratesFromCaches() throws {
+        let manager = FileManager.default
+        let caches = try #require(manager.urls(for: .cachesDirectory, in: .userDomainMask).first)
+        let legacy = caches.appending(path: "Recogs/Images/cover", directoryHint: .isDirectory)
+        try manager.createDirectory(at: legacy, withIntermediateDirectories: true)
+        let stranded = legacy.appending(path: "4242.img", directoryHint: .notDirectory)
+        try Data("cover".utf8).write(to: stranded)
+
+        let destination = URL.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        defer { try? manager.removeItem(at: destination) }
+        ImageCache.migrateFromCachesDirectory(into: destination)
+
+        #expect(manager.fileExists(atPath: destination.appending(path: "cover/4242.img").path))
+        #expect(manager.fileExists(atPath: caches.appending(path: "Recogs/Images").path) == false,
+                "the old location is left clean")
+    }
+
     /// Serves a 1x1 PNG and counts how many times each URL is requested, so "never re-fetch" is a
     /// measurable claim rather than an assumption.
     final class CountingProtocol: URLProtocol, @unchecked Sendable {
