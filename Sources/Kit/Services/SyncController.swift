@@ -44,7 +44,16 @@ final class SyncController {
             activity = nil
             progress = nil
         }
-        await performSync()
+        await runSync()
+    }
+
+    /// Runs a sync in a task of its own, so whoever asked for it cannot cancel it half-done.
+    ///
+    /// `.refreshable` cancels its task the moment the refresh control retracts, and a collection
+    /// fetch that is cancelled mid-stream returns no pages at all. A refresh the user asked for is
+    /// worth finishing.
+    private func runSync() async {
+        await Task { await self.performSync() }.value
     }
 
     enum ResetError: LocalizedError {
@@ -93,7 +102,7 @@ final class SyncController {
         activity = "Downloading collection…"
         // A failure here leaves an empty cache, so it is reported even when the cause is simply
         // being offline.
-        await performSync()
+        await runSync()
         // On the collection screen being offline is a status line, not a failure: the cache is
         // intact and still browsable.
         if isOffline { errorMessage = nil }
@@ -111,7 +120,7 @@ final class SyncController {
             lastSyncedAt = Date()
             UserDefaults.standard.set(lastSyncedAt, forKey: Self.lastSyncedKey)
         } catch is CancellationError {
-            // The view went away; not a failure worth surfacing.
+            // The caller went away; not a failure worth surfacing.
         } catch {
             isOffline = (error as? DiscogsError)?.isOffline ?? false
             // Always recorded here. Callers for which being offline is merely a status clear it;

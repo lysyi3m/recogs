@@ -21,6 +21,17 @@ actor CollectionSyncer {
         var imagesFetched: Int
     }
 
+    enum SyncError: LocalizedError {
+        case incompleteCollection(seen: Int, expected: Int)
+
+        var errorDescription: String? {
+            switch self {
+            case .incompleteCollection(let seen, let expected):
+                return "Sync incomplete — Discogs reported \(expected) records but sent \(seen). Nothing was removed."
+            }
+        }
+    }
+
     private let client: DiscogsClient
     private let store: CollectionStore
     private let imageCache: ImageCache
@@ -43,6 +54,9 @@ actor CollectionSyncer {
 
         var seenInstanceIDs = Set<Int>()
         var itemsSynced = 0
+        var pagesSeen = 0
+        var reportedItems: Int?
+        var reportedPages: Int?
         var artworkTargets: [(releaseID: Int, url: URL, kind: ImageCache.Kind)] = []
 
         for try await page in client.collectionPages(user: identity.username) {
@@ -60,6 +74,9 @@ actor CollectionSyncer {
                 }
             }
             itemsSynced += page.releases.count
+            pagesSeen += 1
+            reportedItems = page.pagination.items
+            reportedPages = page.pagination.pages
 
             onProgress?(Progress(
                 page: page.pagination.page,
@@ -69,6 +86,19 @@ actor CollectionSyncer {
             ))
         }
 
+        // An `AsyncThrowingStream` answers cancellation by finishing, not by throwing, so the loop
+        // above exits normally and its `checkCancellation` never runs. Without this, a cancelled
+        // fetch is indistinguishable from a collection with nothing in it.
+        try Task.checkCancellation()
+
+        // The cache is this device's only copy, so deletion needs more than the absence of an
+        // error. A 200 that is short a page, or that carries an empty `releases` array, would
+        // otherwise wipe a collection that is still there. Discogs is canonical only when its own
+        // item count matches what it actually sent.
+        guard let reportedItems, let reportedPages,
+              pagesSeen >= reportedPages, itemsSynced == reportedItems else {
+            throw SyncError.incompleteCollection(seen: itemsSynced, expected: reportedItems ?? 0)
+        }
         let itemsRemoved = try await store.pruneItems(keeping: seenInstanceIDs)
         let imagesFetched = await warmArtwork(artworkTargets)
 
