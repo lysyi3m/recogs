@@ -1,16 +1,25 @@
+<p align="center">
+  <img src="assets/icon.png" alt="Recogs" width="128" height="128">
+</p>
+
 <h1 align="center">Recogs</h1>
 
 <p align="center">
-  Your Discogs vinyl collection, native on Mac and iPhone. One shared SwiftUI
+  Your Discogs record collection, native on Mac and iPhone. One shared SwiftUI
   codebase, no backend, no third-party dependencies.
 </p>
 
-<!-- Screenshots go here. -->
+<p align="center">
+  <img src="assets/screenshot-collection.png" alt="The collection as a wall of covers" width="49%">
+  <img src="assets/screenshot-record.png" alt="A record's detail page" width="49%">
+</p>
 
 ## Features
 
 - **Cover wall** — scalable grid of cover art with a density slider, from large sleeves down to a tight wall.
+- **List** — the same collection as rows, each carrying artist, year and format, for finding rather than browsing.
 - **Sort** by date added, artist, title or year, in either direction.
+- **Search** the collection as you type, offline.
 - **Record detail** — full-size cover, edition details, tracklist, and a link out to Discogs.
 - **Add** — search Discogs, pick the exact release, confirm.
 - **Remove** — from the detail screen, or a long press on any cover (right click on Mac).
@@ -82,7 +91,7 @@ no token.
 
 ## Scope
 
-v1 is the six flows above. Deliberately out of scope for now: barcode scanning,
+v1 is the flows above. Deliberately out of scope for now: barcode scanning,
 a zoomable infinite canvas, folder-aware UI, an offline edit queue, wantlist,
 marketplace prices, and stats.
 
