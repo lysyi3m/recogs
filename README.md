@@ -11,8 +11,8 @@
 
 - **Cover wall** — scalable grid of cover art with a density slider, from large sleeves down to a tight wall.
 - **Sort** by date added, artist, title or year, in either direction.
-- **Record detail** — full-size cover, pressing details, tracklist, and a link out to Discogs.
-- **Add** — search Discogs, pick the exact pressing, confirm.
+- **Record detail** — full-size cover, edition details, tracklist, and a link out to Discogs.
+- **Add** — search Discogs, pick the exact release, confirm.
 - **Remove** — from the detail screen, or a long press on any cover (right click on Mac).
 - **Offline** — the whole collection stays browsable from the local cache.
 
@@ -52,7 +52,7 @@ collection and upserts by `instance_id`, dropping anything the server no longer
 reports.
 
 The distinction that shapes the data model: Discogs models each *copy* you own
-as an **instance** of a release inside a folder. Two pressings of the same album
+as an **instance** of a release inside a folder. Two copies of the same release
 are two instances sharing one `release_id`, so removal keys off `instance_id`.
 
 The API allows 60 requests per minute. Every call goes through one header-aware

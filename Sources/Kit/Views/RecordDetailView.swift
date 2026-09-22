@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// One record: cover, the facts that identify the pressing, and its tracklist on request.
+/// One record: cover, the facts that identify the edition, and its tracklist on request.
 ///
-/// The collection snapshot already holds everything that identifies a pressing, so the page is
+/// The collection snapshot already holds everything that identifies an edition, so the page is
 /// complete the moment it opens. Only the tracklist needs Discogs, and only when it is opened.
 struct RecordDetailView: View {
     let item: CachedCollectionItem
@@ -166,7 +166,7 @@ struct RecordDetailView: View {
         }
     }
 
-    /// Year and format, the two things that distinguish one pressing from another at a glance.
+    /// Year and format, the two things that distinguish one edition from another at a glance.
     private var subtitle: String {
         [item.year.map(String.init), item.formatSummary.isEmpty ? nil : item.formatSummary]
             .compactMap { $0 }
@@ -175,13 +175,13 @@ struct RecordDetailView: View {
 
     // MARK: - Facts
 
-    /// The pressing details, as a wrapping grid rather than a column of full-width rows: seven
+    /// The edition details, as a wrapping grid rather than a column of full-width rows: seven
     /// two-word facts do not need seven lines of a wide window.
     @ViewBuilder
     private var facts: some View {
         let entries = factEntries
         if !entries.isEmpty {
-            section("Pressing") {
+            section("Edition") {
                 LazyVGrid(
                     // Sized so the five usual facts sit on one line at this page's width; a
                     // lone "Added" wrapping to a second row looks like a mistake.

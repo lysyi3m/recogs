@@ -1,7 +1,7 @@
 import DiscogsKit
 import SwiftUI
 
-/// Search Discogs, pick the exact pressing, confirm, add.
+/// Search Discogs, pick the exact release, confirm, add.
 ///
 /// Search runs on submit rather than per keystroke: the rate limit is 60 requests a minute, and
 /// typing an album name would spend most of it.
@@ -61,7 +61,7 @@ struct AddRecordView: View {
         .onDisappear { search?.cancel() }
         .collectionFailureAlert(editor)
         .alert(
-            "Add this pressing?",
+            "Add this release?",
             isPresented: Binding(
                 get: { confirming != nil },
                 set: { if !$0 { confirming = nil } }
@@ -82,7 +82,7 @@ struct AddRecordView: View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .foregroundStyle(.secondary)
-            TextField("Artist, album, or catalog number", text: $query)
+            TextField("Artist, title, or catalog number", text: $query)
                 .textFieldStyle(.plain)
                 .onSubmit(startSearch)
                 #if os(iOS)
@@ -133,7 +133,7 @@ struct AddRecordView: View {
             ContentUnavailableView(
                 "Find a Record",
                 systemImage: "magnifyingglass",
-                description: Text("Search Discogs for the pressing you own.")
+                description: Text("Search Discogs for the release you own.")
             )
         case .searching:
             ProgressView()
@@ -174,10 +174,10 @@ struct AddRecordView: View {
         var lines = ["\(result.artistName ?? "Unknown") — \(result.releaseTitle)"]
         if let year = result.year { lines.append(String(year)) }
         if !result.formatDisplayName.isEmpty { lines.append(result.formatDisplayName) }
-        let pressing = [result.label.first, result.catno, result.country]
+        let edition = [result.label.first, result.catno, result.country]
             .compactMap { $0 }
             .filter { !$0.isEmpty }
-        if !pressing.isEmpty { lines.append(pressing.joined(separator: " · ")) }
+        if !edition.isEmpty { lines.append(edition.joined(separator: " · ")) }
         return lines.joined(separator: "\n")
     }
 
@@ -208,7 +208,7 @@ private struct SearchResultRow: View {
                 Text(result.artistName ?? "Unknown artist")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                Text(pressingSummary)
+                Text(editionSummary)
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
@@ -219,8 +219,8 @@ private struct SearchResultRow: View {
         .contentShape(.rect)
     }
 
-    /// The details that actually separate one pressing from another.
-    private var pressingSummary: String {
+    /// The details that actually separate one edition from another.
+    private var editionSummary: String {
         [
             result.year.map(String.init),
             result.country,

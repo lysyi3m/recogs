@@ -41,7 +41,7 @@ public struct CollectionPage: Codable, Sendable {
 }
 
 /// One owned copy. Discogs models each copy as an *instance* of a release inside a folder, so two
-/// pressings of the same album are two instances sharing a `releaseID`. Removal keys off
+/// copies of the same release are two instances sharing a `releaseID`. Removal keys off
 /// `instanceID`.
 public struct CollectionItem: Codable, Sendable, Hashable {
     public let instanceID: Int

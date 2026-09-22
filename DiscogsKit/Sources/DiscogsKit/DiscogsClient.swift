@@ -178,7 +178,7 @@ public struct DiscogsClient: Sendable {
 
     /// `DELETE /users/{user}/collection/folders/{folder_id}/releases/{release_id}/instances/{instance_id}`
     ///
-    /// Removes one copy. Keyed by `instanceID`, so owning two pressings of the same release stays
+    /// Removes one copy. Keyed by `instanceID`, so owning two copies of the same release stays
     /// unambiguous.
     public func removeFromCollection(
         user: String,

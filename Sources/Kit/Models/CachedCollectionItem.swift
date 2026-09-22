@@ -9,7 +9,7 @@ import SwiftData
 /// so the grid can sort and render without a per-record call.
 @Model
 final class CachedCollectionItem {
-    /// Identifies the copy. Two pressings of the same album share a `releaseID` but not this.
+    /// Identifies the copy. Two copies of the same release share a `releaseID` but not this.
     @Attribute(.unique) var instanceID: Int
     var releaseID: Int
     var folderID: Int

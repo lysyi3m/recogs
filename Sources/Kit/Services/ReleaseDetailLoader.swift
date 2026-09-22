@@ -3,7 +3,7 @@ import Foundation
 
 /// Loads a release detail cache-first, fetching from Discogs only on a miss.
 ///
-/// Tracklist, notes and the pressing's country all arrive together from `GET /releases/{id}` —
+/// Tracklist, notes and the edition's country all arrive together from `GET /releases/{id}` —
 /// there is no lighter call for any of them — so opening a record fetches once and keeps the
 /// result. A second visit to the same record costs nothing against the rate limit.
 @MainActor

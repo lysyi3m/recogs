@@ -100,7 +100,7 @@ final class CollectionEditor {
 
     /// Removes a copy from the collection, optimistically.
     ///
-    /// Keyed by `instanceID`: removing one of two pressings of the same album must not touch the
+    /// Keyed by `instanceID`: removing one of two copies of the same release must not touch the
     /// other. The row disappears from the grid immediately and comes back if Discogs rejects the
     /// delete.
     @discardableResult

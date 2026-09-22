@@ -23,7 +23,7 @@ struct CachedTrack: Codable, Sendable, Hashable, Identifiable {
 
 /// The full release behind a collection item, fetched on first open and kept afterwards.
 ///
-/// Keyed by `releaseID`, not `instanceID`: two copies of the same pressing share one detail record.
+/// Keyed by `releaseID`, not `instanceID`: two copies of the same release share one detail record.
 @Model
 final class CachedReleaseDetail {
     @Attribute(.unique) var releaseID: Int
