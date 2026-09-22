@@ -193,43 +193,21 @@ private struct SearchResultRow: View {
     let result: SearchResult
 
     var body: some View {
-        HStack(spacing: 12) {
-            CoverImageView(
-                releaseID: result.id,
-                remoteURL: result.thumb,
-                kind: .thumb,
-                edge: 56
-            )
-            .frame(width: 56, height: 56)
-            .clipShape(.rect(cornerRadius: 4))
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(result.releaseTitle).font(.body)
-                Text(result.artistName ?? "Unknown artist")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Text(editionSummary)
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 0)
-        }
-        .padding(.vertical, 4)
-        .contentShape(.rect)
-    }
-
-    /// The details that actually separate one edition from another.
-    private var editionSummary: String {
-        [
-            result.year.map(String.init),
-            result.country,
-            result.label.first,
-            result.catno,
-            result.formatDisplayName.isEmpty ? nil : result.formatDisplayName,
-        ]
-        .compactMap { $0 }
-        .filter { !$0.isEmpty }
-        .joined(separator: " · ")
+        ReleaseRow(
+            releaseID: result.id,
+            remoteURL: result.thumb,
+            kind: .thumb,
+            title: result.releaseTitle,
+            artist: result.artistName ?? "Unknown artist",
+            // Richer than the collection's row: picking the right edition out of a page of
+            // near-identical results is exactly what the label and catalogue number are for.
+            details: ReleaseRow.details([
+                result.year.map(String.init),
+                result.country,
+                result.label.first,
+                result.catno,
+                result.formatDisplayName,
+            ])
+        )
     }
 }

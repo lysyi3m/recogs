@@ -17,6 +17,10 @@ struct CollectionView: View {
     private let onSelect: (CachedCollectionItem) -> Void
     private let onRequestRemove: (CachedCollectionItem) -> Void
 
+    #if os(macOS)
+    @State private var hoveredID: PersistentIdentifier?
+    #endif
+
     init(
         layout: CollectionLayout,
         sort: CollectionSortOption,
@@ -79,7 +83,21 @@ struct CollectionView: View {
         ScrollViewReader { proxy in
             List {
                 ForEach(items) { item in
-                    Button { onSelect(item) } label: { RecordRow(item: item) }
+                    Button { onSelect(item) } label: {
+                        ReleaseRow(
+                            releaseID: item.releaseID,
+                            remoteURL: item.artwork.url,
+                            kind: item.artwork.kind,
+                            title: item.title,
+                            artist: item.artistName,
+                            // What the record page puts under the title. Year alone in a
+                            // right-hand column is a lot of width for four digits.
+                            details: ReleaseRow.details([
+                                item.year.map(String.init),
+                                item.formatSummary,
+                            ])
+                        )
+                    }
                         .buttonStyle(.plain)
                         .contextMenu {
                             Button("Open") { onSelect(item) }
@@ -93,6 +111,17 @@ struct CollectionView: View {
                             Button("Remove", systemImage: "trash", role: .destructive) {
                                 onRequestRemove(item)
                             }
+                        }
+                        #else
+                        // A pointer needs to be told what it is about to click. One piece of state
+                        // for the whole list rather than one per row, so only two rows redraw.
+                        .listRowBackground(
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(hoveredID == item.id ? Color.primary.opacity(0.06) : .clear)
+                        )
+                        .onHover { isInside in
+                            if isInside { hoveredID = item.id }
+                            else if hoveredID == item.id { hoveredID = nil }
                         }
                         #endif
                 }
@@ -146,48 +175,6 @@ struct CollectionView: View {
         itemWidth < 100 ? 6 : 12
     }
     #endif
-}
-
-/// One row: the cover small enough to identify the record, then the text the sort is keyed on.
-private struct RecordRow: View {
-    let item: CachedCollectionItem
-
-    private static let coverEdge: CGFloat = 44
-
-    var body: some View {
-        HStack(spacing: 12) {
-            CoverImageView(
-                releaseID: item.releaseID,
-                remoteURL: item.artwork.url,
-                kind: item.artwork.kind,
-                edge: Self.coverEdge
-            )
-            .frame(width: Self.coverEdge, height: Self.coverEdge)
-            .clipShape(.rect(cornerRadius: 4))
-            .overlay {
-                RoundedRectangle(cornerRadius: 4)
-                    .strokeBorder(.primary.opacity(0.12), lineWidth: 0.5)
-            }
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(item.title).lineLimit(1)
-                Text(item.artistName)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-
-            Spacer(minLength: 8)
-
-            if let year = item.year {
-                Text(String(year))
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.tertiary)
-            }
-        }
-        .padding(.vertical, 2)
-        .contentShape(.rect)
-    }
 }
 
 private struct CoverCell: View {
