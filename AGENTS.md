@@ -7,6 +7,8 @@ Native macOS + iOS SwiftUI app for managing a personal record collection via the
 Shared by `recogs`, `time-strip` and `pdf-unpack`. Where a repo-specific section below
 contradicts a rule here, the repo-specific rule wins — and say so when you notice it.
 
+- **One toolchain.** macOS 26+ (iOS 26+ where there is an iOS target), Swift 6 language mode,
+  Xcode 27. CI pins the same Xcode, so code that builds locally must build there too.
 - **XcodeGen owns the project.** `project.yml` is the source of truth. Never hand-edit the
   generated `.xcodeproj`. Never commit it, `Config/*.plist` or `Config/*.entitlements`. Run
   `make generate` after every `project.yml` change.
@@ -31,7 +33,7 @@ contradicts a rule here, the repo-specific rule wins — and say so when you not
 
 ## Stack
 
-- SwiftUI multiplatform, macOS 26+ / iOS 26+, Swift 6 language mode. One shared feature layer;
+- SwiftUI multiplatform, macOS and iOS. One shared feature layer;
   platform-specific code only where the platforms genuinely differ.
 - `DiscogsKit`: local Swift package (URLSession + async/await, Codable models, header-aware
   rate limiter). `swift test --package-path DiscogsKit` runs its suite.
