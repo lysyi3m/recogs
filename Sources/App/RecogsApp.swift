@@ -11,6 +11,15 @@ import AppKit
 /// directly, along with the separator it leaves behind.
 final class MenuTrimmingAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Keep AppKit's runtime icon in sync with the compiled asset catalog. During development,
+        // Launch Services can otherwise retain the placeholder from an older build at this path.
+        // NSWorkspace applies the system icon shape, but reports a 32 pt logical size; correcting
+        // that size lets Dock use its high-resolution representations instead of scaling one up.
+        if let appIcon = NSWorkspace.shared.icon(forFile: Bundle.main.bundlePath).copy() as? NSImage {
+            appIcon.size = NSSize(width: 512, height: 512)
+            NSApp.applicationIconImage = appIcon
+        }
+
         guard let fileMenu = NSApp.mainMenu?.items
             .compactMap(\.submenu)
             .first(where: { menu in
