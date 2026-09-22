@@ -8,6 +8,7 @@ import SwiftUI
 struct CollectionGridView: View {
     @Query private var items: [CachedCollectionItem]
 
+    /// The density the macOS slider drives. iOS sizes its cells from the screen instead.
     private let itemWidth: CGFloat
     private let searchQuery: String
     private let onSelect: (CachedCollectionItem) -> Void
@@ -36,19 +37,45 @@ struct CollectionGridView: View {
         if items.isEmpty, !searchQuery.isEmpty {
             ContentUnavailableView.search(text: searchQuery)
         } else {
-            grid
+            #if os(iOS)
+            // The covers are the content, so they take the width the device has: two per row on a
+            // phone, more on an iPad. The edge is measured rather than assumed because it is also
+            // the decode size.
+            GeometryReader { proxy in
+                let columnCount = max(2, Int(proxy.size.width / 200))
+                let edge = max((proxy.size.width - phoneSpacing * CGFloat(columnCount + 1)) / CGFloat(columnCount), 1)
+                grid(
+                    columns: Array(
+                        repeating: GridItem(.fixed(edge), spacing: phoneSpacing),
+                        count: columnCount
+                    ),
+                    spacing: phoneSpacing,
+                    edge: edge,
+                    showsCaption: true
+                )
+            }
+            #else
+            grid(
+                columns: [GridItem(.adaptive(minimum: itemWidth), spacing: spacing)],
+                spacing: spacing,
+                edge: itemWidth,
+                showsCaption: itemWidth >= 110
+            )
+            #endif
         }
     }
 
-    private var grid: some View {
+    private func grid(
+        columns: [GridItem],
+        spacing: CGFloat,
+        edge: CGFloat,
+        showsCaption: Bool
+    ) -> some View {
         ScrollView {
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: itemWidth), spacing: spacing)],
-                spacing: spacing
-            ) {
+            LazyVGrid(columns: columns, spacing: spacing) {
                 ForEach(items) { item in
                     Button { onSelect(item) } label: {
-                        CoverCell(item: item, edge: itemWidth, showsCaption: itemWidth >= 110)
+                        CoverCell(item: item, edge: edge, showsCaption: showsCaption)
                     }
                     .buttonStyle(.plain)
                     // Long press on iOS, right click on macOS.
@@ -65,10 +92,14 @@ struct CollectionGridView: View {
         }
     }
 
+    #if os(iOS)
+    private var phoneSpacing: CGFloat { 16 }
+    #else
     /// Tight covers at high density read as a wall; loose ones at low density read as cards.
     private var spacing: CGFloat {
         itemWidth < 100 ? 6 : 12
     }
+    #endif
 }
 
 private struct CoverCell: View {

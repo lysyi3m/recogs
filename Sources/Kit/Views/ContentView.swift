@@ -75,8 +75,10 @@ public struct ContentView: View {
         .toolbarBackground(Color(nsColor: .windowBackgroundColor), for: .windowToolbar)
         .toolbarBackground(.visible, for: .windowToolbar)
         #endif
+        #if os(macOS)
         // Outside the stack, so the status stays visible on the record detail too.
         .safeAreaInset(edge: .bottom) { statusBar }
+        #endif
         // Menu commands act here, where the state they drive lives.
         .onChange(of: services.commands.addRequests) {
             if services.hasToken { isAdding = true }
@@ -220,6 +222,12 @@ public struct ContentView: View {
         return "\(progress.itemsFetched) of \(progress.totalItems) records"
     }
 
+    // The bottom bar is a desktop affordance: a window has the room for a persistent strip of
+    // state, and grid density only makes sense where the window can be any width. On a phone the
+    // grid is two columns wide by definition, pull-to-refresh reports the sync, and the bar is
+    // just a stolen row.
+    #if os(macOS)
+
     /// One row: what you can change on the left, what is happening on the right.
     @ViewBuilder
     private var statusBar: some View {
@@ -234,7 +242,6 @@ public struct ContentView: View {
     }
 
     private var barContents: some View {
-        #if os(macOS)
         HStack(spacing: 12) {
             // The density control belongs to the grid, so it goes away on the detail screen.
             if selection == nil { densityControls }
@@ -249,21 +256,6 @@ public struct ContentView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .frame(minHeight: 28)
-        #else
-        // A phone has no room for a centred overlay: it lands on top of the density control. The
-        // count sits in the row instead, and loses out to the status if space runs short.
-        HStack(spacing: 10) {
-            if selection == nil {
-                densityControls
-                count.layoutPriority(-1)
-            }
-            Spacer(minLength: 8)
-            syncStatus
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .frame(minHeight: 28)
-        #endif
     }
 
     private var count: some View {
@@ -293,19 +285,11 @@ public struct ContentView: View {
         HStack(spacing: 8) {
             Image(systemName: "square.grid.3x3.fill").imageScale(.small)
             Slider(value: $itemWidth, in: 60...260)
-                .frame(width: sliderWidth)
+                .frame(width: 140)
                 .controlSize(.small)
             Image(systemName: "square.fill").imageScale(.small)
         }
         .foregroundStyle(.secondary)
-    }
-
-    private var sliderWidth: CGFloat {
-        #if os(macOS)
-        140
-        #else
-        96
-        #endif
     }
 
     /// Always says something: a sync in flight, a problem, or when it last worked.
@@ -348,6 +332,8 @@ public struct ContentView: View {
                 .foregroundStyle(.secondary)
         }
     }
+
+    #endif
 }
 
 /// The collection search field, present only once there is a collection to search.
