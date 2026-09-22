@@ -226,6 +226,11 @@ struct AddRecordView: View {
                     }
                 }
             }
+            #if os(iOS)
+            // The default grouped style insets the results into a card, which under the sheet's
+            // own divider reads as a band of dead space. Search results belong flush to the edge.
+            .listStyle(.plain)
+            #endif
         }
     }
 
