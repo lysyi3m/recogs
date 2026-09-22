@@ -17,6 +17,14 @@ struct RecordDetailView: View {
 
     private var detail: ReleaseDetailSnapshot? { loader?.snapshot }
 
+    private var pagePadding: CGFloat {
+        #if os(macOS)
+        28
+        #else
+        20
+        #endif
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
@@ -32,7 +40,7 @@ struct RecordDetailView: View {
             }
             .frame(maxWidth: 780, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .center)
-            .padding(28)
+            .padding(pagePadding)
         }
         .navigationTitle(item.title)
         #if os(iOS)
@@ -105,39 +113,58 @@ struct RecordDetailView: View {
         return item.artwork
     }
 
+    @ViewBuilder
     private var header: some View {
+        #if os(iOS)
+        // Side by side, a phone leaves the text about 120pt — too narrow for a format summary, and
+        // narrow enough that the genre chips collapse to one letter per line. The cover leads
+        // instead, the way a record page reads anyway.
+        VStack(alignment: .leading, spacing: 18) {
+            cover(edge: 240)
+                .frame(maxWidth: .infinity, alignment: .center)
+            titleBlock
+        }
+        #else
         HStack(alignment: .top, spacing: 24) {
-            CoverImageView(
-                releaseID: item.releaseID,
-                remoteURL: coverSource.url,
-                kind: coverSource.kind,
-                edge: 200
-            )
-            .frame(width: 200, height: 200)
-            .clipShape(.rect(cornerRadius: 8))
-            .shadow(radius: 6, y: 3)
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text(item.title)
-                    .font(.title2.weight(.semibold))
-                    .textSelection(.enabled)
-                Text(item.artistName)
-                    .font(.title3)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-
-                if !subtitle.isEmpty {
-                    Text(subtitle)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 2)
-                }
-                if !item.genres.isEmpty || !item.styles.isEmpty {
-                    TagRow(tags: item.genres + item.styles)
-                        .padding(.top, 4)
-                }
-            }
+            cover(edge: 200)
+            titleBlock
             Spacer(minLength: 0)
+        }
+        #endif
+    }
+
+    private func cover(edge: CGFloat) -> some View {
+        CoverImageView(
+            releaseID: item.releaseID,
+            remoteURL: coverSource.url,
+            kind: coverSource.kind,
+            edge: edge
+        )
+        .frame(width: edge, height: edge)
+        .clipShape(.rect(cornerRadius: 8))
+        .shadow(radius: 6, y: 3)
+    }
+
+    private var titleBlock: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(item.title)
+                .font(.title2.weight(.semibold))
+                .textSelection(.enabled)
+            Text(item.artistName)
+                .font(.title3)
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+
+            if !subtitle.isEmpty {
+                Text(subtitle)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .padding(.top, 2)
+            }
+            if !item.genres.isEmpty || !item.styles.isEmpty {
+                TagRow(tags: item.genres + item.styles)
+                    .padding(.top, 4)
+            }
         }
     }
 
@@ -214,7 +241,10 @@ struct RecordDetailView: View {
                 }
             }
         }
-
+        #if os(iOS)
+        // Left to the accent colour, the section heading reads as a link rather than a heading.
+        .tint(.primary)
+        #endif
     }
 
     @ViewBuilder
@@ -271,7 +301,7 @@ private struct TagRow: View {
     let tags: [String]
 
     var body: some View {
-        HStack(spacing: 6) {
+        FlowLayout(spacing: 6) {
             ForEach(tags.prefix(5), id: \.self) { tag in
                 Text(tag)
                     .font(.caption)
@@ -279,6 +309,47 @@ private struct TagRow: View {
                     .padding(.vertical, 3)
                     .background(.quaternary, in: .capsule)
             }
+        }
+    }
+}
+
+/// Chips that wrap onto the next line rather than being squeezed, which is what an `HStack` does
+/// to them when the column is narrower than their combined width.
+private struct FlowLayout: Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        var x: CGFloat = 0
+        var height: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > maxWidth {
+                height += rowHeight + spacing
+                rowHeight = 0
+                x = 0
+            }
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
+        return CGSize(width: maxWidth.isFinite ? maxWidth : x, height: height + rowHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX
+        var y = bounds.minY
+        var rowHeight: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > bounds.minX, x + size.width > bounds.maxX {
+                y += rowHeight + spacing
+                rowHeight = 0
+                x = bounds.minX
+            }
+            subview.place(at: CGPoint(x: x, y: y), anchor: .topLeading, proposal: ProposedViewSize(size))
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
         }
     }
 }
