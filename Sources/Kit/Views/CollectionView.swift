@@ -1,13 +1,16 @@
 import SwiftData
 import SwiftUI
 
-/// The cover wall: a scalable grid of thumbs, sorted on the store rather than in memory.
+/// The collection, as a wall of covers or as rows, sorted on the store rather than in memory.
 ///
 /// The sort lives in the `@Query` descriptor, so changing it re-fetches instead of re-sorting an
-/// array, and the grid stays lazy.
-struct CollectionGridView: View {
+/// array, and both layouts stay lazy.
+struct CollectionView: View {
     @Query private var items: [CachedCollectionItem]
 
+    private let layout: CollectionLayout
+    /// Held only to notice a change: re-sorted rows make the old scroll position meaningless.
+    private let sortSignature: String
     /// The density the macOS slider drives. iOS sizes its cells from the screen instead.
     private let itemWidth: CGFloat
     private let searchQuery: String
@@ -15,6 +18,7 @@ struct CollectionGridView: View {
     private let onRequestRemove: (CachedCollectionItem) -> Void
 
     init(
+        layout: CollectionLayout,
         sort: CollectionSortOption,
         direction: SortDirection,
         itemWidth: CGFloat,
@@ -27,6 +31,8 @@ struct CollectionGridView: View {
         // Filtering in the fetch rather than over the results keeps the grid lazy.
         descriptor.predicate = CachedCollectionItem.searchPredicate(matching: searchQuery)
         _items = Query(descriptor)
+        self.layout = layout
+        self.sortSignature = "\(sort.rawValue).\(direction.rawValue)"
         self.searchQuery = searchQuery
         self.itemWidth = itemWidth
         self.onSelect = onSelect
@@ -36,6 +42,8 @@ struct CollectionGridView: View {
     var body: some View {
         if items.isEmpty, !searchQuery.isEmpty {
             ContentUnavailableView.search(text: searchQuery)
+        } else if layout == .list {
+            list
         } else {
             #if os(iOS)
             // The covers are the content, so they take the width the device has: two per row on a
@@ -62,6 +70,44 @@ struct CollectionGridView: View {
                 showsCaption: itemWidth >= 110
             )
             #endif
+        }
+    }
+
+    /// Rows, for finding rather than browsing: the sort key is readable instead of implied by
+    /// position, and far more of the collection fits on screen.
+    private var list: some View {
+        ScrollViewReader { proxy in
+            List {
+                ForEach(items) { item in
+                    Button { onSelect(item) } label: { RecordRow(item: item) }
+                        .buttonStyle(.plain)
+                        .contextMenu {
+                            Button("Open") { onSelect(item) }
+                            Divider()
+                            Button("Remove from Collection…", systemImage: "trash", role: .destructive) {
+                                onRequestRemove(item)
+                            }
+                        }
+                        #if os(iOS)
+                        .swipeActions(edge: .trailing) {
+                            Button("Remove", systemImage: "trash", role: .destructive) {
+                                onRequestRemove(item)
+                            }
+                        }
+                        #endif
+                }
+            }
+            #if os(macOS)
+            .listStyle(.inset)
+            .scrollContentBackground(.hidden)
+            #endif
+            // A new sort re-fetches into the same list, which keeps its scroll offset. The offset
+            // no longer points at anything the user chose, so it lands a couple of rows down the
+            // new ordering. Start at the top, which is what the re-sort was asking for.
+            .onChange(of: sortSignature) {
+                guard let first = items.first?.id else { return }
+                proxy.scrollTo(first, anchor: .top)
+            }
         }
     }
 
@@ -100,6 +146,48 @@ struct CollectionGridView: View {
         itemWidth < 100 ? 6 : 12
     }
     #endif
+}
+
+/// One row: the cover small enough to identify the record, then the text the sort is keyed on.
+private struct RecordRow: View {
+    let item: CachedCollectionItem
+
+    private static let coverEdge: CGFloat = 44
+
+    var body: some View {
+        HStack(spacing: 12) {
+            CoverImageView(
+                releaseID: item.releaseID,
+                remoteURL: item.artwork.url,
+                kind: item.artwork.kind,
+                edge: Self.coverEdge
+            )
+            .frame(width: Self.coverEdge, height: Self.coverEdge)
+            .clipShape(.rect(cornerRadius: 4))
+            .overlay {
+                RoundedRectangle(cornerRadius: 4)
+                    .strokeBorder(.primary.opacity(0.12), lineWidth: 0.5)
+            }
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(item.title).lineLimit(1)
+                Text(item.artistName)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            if let year = item.year {
+                Text(String(year))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.vertical, 2)
+        .contentShape(.rect)
+    }
 }
 
 private struct CoverCell: View {

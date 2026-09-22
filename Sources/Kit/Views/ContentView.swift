@@ -11,6 +11,7 @@ public struct ContentView: View {
     @AppStorage("collectionSort") private var sortRaw = CollectionSortOption.default.rawValue
     @AppStorage("collectionSortDirection") private var directionRaw = CollectionSortOption.defaultOrder.rawValue
     @AppStorage("collectionItemWidth") private var itemWidth = 120.0
+    @AppStorage("collectionLayout") private var layoutRaw = CollectionLayout.default.rawValue
 
     @State private var selection: CachedCollectionItem?
     @State private var isAdding = false
@@ -31,6 +32,10 @@ public struct ContentView: View {
 
     private var direction: SortDirection {
         SortDirection(rawValue: directionRaw) ?? CollectionSortOption.defaultOrder
+    }
+
+    private var layout: CollectionLayout {
+        CollectionLayout(rawValue: layoutRaw) ?? .default
     }
 
     public var body: some View {
@@ -139,7 +144,8 @@ public struct ContentView: View {
                 Button("Add a Record") { isAdding = true }
             }
         } else {
-            CollectionGridView(
+            CollectionView(
+                layout: layout,
                 sort: sort,
                 direction: direction,
                 itemWidth: itemWidth,
@@ -201,6 +207,15 @@ public struct ContentView: View {
             Menu {
                 // Inline, so the keys and the direction sit in one flat menu with checkmarks.
                 // A plain picker in a menu becomes a submenu, which buries a two-click choice.
+                Picker("View", selection: $layoutRaw) {
+                    ForEach(CollectionLayout.allCases) { option in
+                        Label(option.label, systemImage: option.symbol).tag(option.rawValue)
+                    }
+                }
+                .pickerStyle(.inline)
+
+                Divider()
+
                 Picker("Sort By", selection: $sortRaw) {
                     ForEach(CollectionSortOption.allCases) { option in
                         Text(option.label).tag(option.rawValue)
@@ -217,8 +232,10 @@ public struct ContentView: View {
                 }
                 .pickerStyle(.inline)
             } label: {
-                Label("Sort", systemImage: "arrow.up.arrow.down")
+                Label("View Options", systemImage: "line.3.horizontal.decrease")
             }
+            // The menu is the control; the chevron beside it on macOS is redundant chrome.
+            .menuIndicator(.hidden)
         }
     }
 
@@ -263,8 +280,9 @@ public struct ContentView: View {
 
     private var barContents: some View {
         HStack(spacing: 12) {
-            // The density control belongs to the grid, so it goes away on the detail screen.
-            if selection == nil { densityControls }
+            // The density control sizes grid cells, so it goes away on the detail screen and in
+            // the list, which has nothing to size.
+            if selection == nil, layout == .grid { densityControls }
             Spacer(minLength: 12)
             syncStatus
         }

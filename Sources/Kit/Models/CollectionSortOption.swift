@@ -1,7 +1,32 @@
 import Foundation
 import SwiftData
 
-/// Sort dimensions offered by the collection grid. The default is date added, descending.
+/// How the collection is drawn. A wall of covers is for browsing; rows are for finding a record in
+/// a large collection, where the sort key is legible rather than implied by position.
+enum CollectionLayout: String, CaseIterable, Identifiable, Sendable {
+    case grid
+    case list
+
+    static let `default` = CollectionLayout.grid
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .grid: return "Grid"
+        case .list: return "List"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .grid: return "square.grid.2x2"
+        case .list: return "list.bullet"
+        }
+    }
+}
+
+/// Sort dimensions offered by the collection. The default is date added, descending.
 enum CollectionSortOption: String, CaseIterable, Identifiable, Sendable {
     case dateAdded
     case artist
