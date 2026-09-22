@@ -172,15 +172,12 @@ struct AddRecordView: View {
         }
     }
 
+    /// Names the row that was tapped, in the words that row used: one line for the release, one
+    /// for the edition. Four separate lines read as a form rather than a sentence.
     private func confirmationMessage(for result: SearchResult) -> String {
-        var lines = ["\(result.artistName ?? "Unknown") — \(result.releaseTitle)"]
-        if let year = result.year { lines.append(String(year)) }
-        if !result.formatDisplayName.isEmpty { lines.append(result.formatDisplayName) }
-        let edition = [result.label.first, result.catno, result.country]
-            .compactMap { $0 }
-            .filter { !$0.isEmpty }
-        if !edition.isEmpty { lines.append(edition.joined(separator: " · ")) }
-        return lines.joined(separator: "\n")
+        let release = "\(result.artistName ?? "Unknown artist") — \(result.releaseTitle)"
+        let details = result.editionDetails
+        return details.isEmpty ? release : "\(release)\n\(details)"
     }
 
     private func add(_ result: SearchResult) async {
@@ -201,15 +198,24 @@ private struct SearchResultRow: View {
             kind: .thumb,
             title: result.releaseTitle,
             artist: result.artistName ?? "Unknown artist",
-            // Richer than the collection's row: picking the right edition out of a page of
-            // near-identical results is exactly what the label and catalogue number are for.
-            details: ReleaseRow.details([
-                result.year.map(String.init),
-                result.country,
-                result.label.first,
-                result.catno,
-                result.formatDisplayName,
-            ])
+            details: result.editionDetails
         )
+    }
+}
+
+private extension SearchResult {
+    /// The details that separate one edition from another. Richer than the collection's row:
+    /// picking the right one out of a page of near-identical results is exactly what the label and
+    /// catalogue number are for.
+    ///
+    /// Built once, so the confirmation always describes precisely the row that was tapped.
+    var editionDetails: String {
+        ReleaseRow.details([
+            year.map(String.init),
+            country,
+            label.first,
+            catno,
+            formatDisplayName,
+        ])
     }
 }
