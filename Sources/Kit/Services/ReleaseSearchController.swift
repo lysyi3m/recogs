@@ -3,9 +3,9 @@ import Foundation
 
 /// Runs release searches so that only the newest one can change what is on screen.
 ///
-/// Submitting repeatedly, or editing mid-request, used to leave several requests in flight with no
-/// ordering between them: a slower earlier response could land last and replace newer results with
-/// results for a query the user had moved on from.
+/// Submitting repeatedly, or editing mid-request, puts several requests in flight with no ordering
+/// between them, so a slower earlier response could replace newer results. Each search takes a new
+/// `generation`, and a response is applied only while its generation is still current.
 @MainActor
 @Observable
 final class ReleaseSearchController {

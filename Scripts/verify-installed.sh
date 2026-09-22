@@ -13,7 +13,15 @@ set -eu
 UDID="${1:?usage: verify-installed.sh <udid> [--expect s] [--forbid s]}"
 shift
 BUNDLE_ID="com.mlkshkvch.recogs"
-BUILT="${DERIVED_APP:-$HOME/Library/Developer/Xcode/DerivedData/Recogs-fkbfybkrgqgkvlaixvsuakofqrhy/Build/Products/Debug-iphonesimulator/Recogs.app}"
+# The Debug simulator build of this checkout, wherever DerivedData put it. DERIVED_APP overrides.
+REPO="${0:A:h:h}"
+if [[ -z "${DERIVED_APP:-}" ]]; then
+  PRODUCTS=$(xcodebuild -project "$REPO/Recogs.xcodeproj" -scheme Recogs -configuration Debug \
+    -destination 'generic/platform=iOS Simulator' -showBuildSettings 2>/dev/null \
+    | awk -F' = ' '/^ *BUILT_PRODUCTS_DIR = /{print $2; exit}')
+  [[ -n "$PRODUCTS" ]] || { print -u2 "FAIL: no Recogs.xcodeproj build settings — run make generate"; exit 1; }
+fi
+BUILT="${DERIVED_APP:-$PRODUCTS/Recogs.app}"
 
 EXPECT=""
 FORBID=""

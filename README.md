@@ -80,6 +80,8 @@ cached on disk permanently and never re-fetched.
 | `Sources/Kit/` | `RecogsKit` — SwiftData cache, image cache, services, and the SwiftUI feature layer |
 | `Sources/App/` | The app target: `@main` and assets |
 | `Tests/` | `RecogsKit` unit tests (`@testable import RecogsKit`) |
+| `Config/` | `Base.xcconfig`, the privacy manifest and the iOS entitlements; `make generate` writes the rest (git-ignored) |
+| `Scripts/` | `verify-installed.sh` — checks the simulator is running the build in DerivedData |
 
 ## Testing
 
