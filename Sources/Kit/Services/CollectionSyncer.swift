@@ -14,11 +14,19 @@ actor CollectionSyncer {
         var totalItems: Int
     }
 
+    struct ArtworkTarget: Sendable {
+        let releaseID: Int
+        let url: URL
+        let kind: ImageCache.Kind
+    }
+
     struct Summary: Sendable {
         var username: String
         var itemsSynced: Int
         var itemsRemoved: Int
-        var imagesFetched: Int
+        /// The covers worth having on disk. Handed back rather than downloaded here, so a caller
+        /// can call the sync finished the moment the collection is correct.
+        var artwork: [ArtworkTarget]
     }
 
     enum SyncError: LocalizedError {
@@ -42,11 +50,15 @@ actor CollectionSyncer {
         self.imageCache = imageCache
     }
 
-    /// Reconciles the whole collection, then warms the thumb cache.
+    /// Reconciles the whole collection against Discogs.
+    ///
+    /// Artwork is not downloaded here. The collection is correct as soon as this returns, and the
+    /// grid loads whatever covers it needs on demand, so holding the sync open for a few hundred
+    /// image downloads only makes a finished sync look stuck.
     ///
     /// - Parameter onProgress: called after each page so the UI can fill in during a first sync.
     @discardableResult
-    func sync(onProgress: (@Sendable (Progress) -> Void)? = nil) async throws -> Summary {
+    func reconcile(onProgress: (@Sendable (Progress) -> Void)? = nil) async throws -> Summary {
         let identity = try await client.identity()
 
         let folders = try await client.folders(user: identity.username)
@@ -57,7 +69,7 @@ actor CollectionSyncer {
         var pagesSeen = 0
         var reportedItems: Int?
         var reportedPages: Int?
-        var artworkTargets: [(releaseID: Int, url: URL, kind: ImageCache.Kind)] = []
+        var artworkTargets: [ArtworkTarget] = []
 
         for try await page in client.collectionPages(user: identity.username) {
             try Task.checkCancellation()
@@ -70,7 +82,7 @@ actor CollectionSyncer {
                 let source = item.basicInformation.coverImage ?? item.basicInformation.thumb
                 let kind: ImageCache.Kind = item.basicInformation.coverImage == nil ? .thumb : .cover
                 if let source, let url = URL(string: source) {
-                    artworkTargets.append((item.releaseID, url, kind))
+                    artworkTargets.append(ArtworkTarget(releaseID: item.releaseID, url: url, kind: kind))
                 }
             }
             itemsSynced += page.releases.count
@@ -100,19 +112,19 @@ actor CollectionSyncer {
             throw SyncError.incompleteCollection(seen: itemsSynced, expected: reportedItems ?? 0)
         }
         let itemsRemoved = try await store.pruneItems(keeping: seenInstanceIDs)
-        let imagesFetched = await warmArtwork(artworkTargets)
 
         return Summary(
             username: identity.username,
             itemsSynced: itemsSynced,
             itemsRemoved: itemsRemoved,
-            imagesFetched: imagesFetched
+            artwork: artworkTargets
         )
     }
 
     /// Downloads any artwork not already on disk. Failures are skipped: a missing cover must not
     /// fail a sync that otherwise succeeded, and the next refresh will try again.
-    private func warmArtwork(_ targets: [(releaseID: Int, url: URL, kind: ImageCache.Kind)]) async -> Int {
+    @discardableResult
+    func warmArtwork(_ targets: [ArtworkTarget]) async -> Int {
         await withTaskGroup(of: Bool.self) { group in
             for target in targets {
                 group.addTask { [imageCache] in

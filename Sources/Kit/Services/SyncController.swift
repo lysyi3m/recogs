@@ -23,6 +23,9 @@ final class SyncController {
     /// The sync currently in flight, so work tied to the account can be stopped before the account
     /// goes away. Held because `runSync` deliberately shields the work from its caller.
     private var running: Task<Void, Never>?
+    /// Cover downloads, which outlive the sync that scheduled them. Tracked so sign-out can stop
+    /// them: they write files for whichever account asked for them.
+    private var warmingArtwork: Task<Void, Never>?
     private static let lastSyncedKey = "lastSyncedAt"
 
     init(services: AppServices) {
@@ -69,9 +72,11 @@ final class SyncController {
     /// account's records back into the store behind it. A cancelled fetch throws rather than
     /// pruning, so nothing is half-applied.
     func cancelAndWait() async {
-        guard let task = running else { return }
-        task.cancel()
-        await task.value
+        warmingArtwork?.cancel()
+        running?.cancel()
+        await warmingArtwork?.value
+        await running?.value
+        warmingArtwork = nil
     }
 
     enum ResetError: LocalizedError {
@@ -131,12 +136,18 @@ final class SyncController {
         errorMessage = nil
 
         do {
-            lastSummary = try await syncer.sync { update in
+            let summary = try await syncer.reconcile { update in
                 Task { @MainActor in self.progress = update }
             }
+            lastSummary = summary
             isOffline = false
             lastSyncedAt = Date()
             UserDefaults.standard.set(lastSyncedAt, forKey: Self.lastSyncedKey)
+
+            // The collection is correct now. Covers are a pre-fetch — the grid loads what it shows
+            // on demand — so they warm in the background rather than holding the sync open.
+            warmingArtwork?.cancel()
+            warmingArtwork = Task { await syncer.warmArtwork(summary.artwork) }
         } catch is CancellationError {
             // The caller went away; not a failure worth surfacing.
         } catch {
