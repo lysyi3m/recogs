@@ -44,7 +44,7 @@ actor ImageCache {
     private let maximumConcurrentDownloads: Int
 
     private var activeDownloads = 0
-    private var waiters: [CheckedContinuation<Void, Never>] = []
+    private var waiters: [UUID: CheckedContinuation<Void, any Error>] = [:]
     /// Coalesces concurrent requests for the same file so a cover is fetched once, not once per view.
     private var inFlight: [URL: Task<URL, any Error>] = [:]
 
@@ -178,7 +178,10 @@ actor ImageCache {
 
     func diskUsage() -> Int { statistics().byteCount }
 
-    func removeAll() throws {
+    func removeAll() async throws {
+        // Downloads first: otherwise one still in flight writes its file into the directory we
+        // just deleted, and the cache the user asked to clear is not empty.
+        await cancelInFlightDownloads()
         guard FileManager.default.fileExists(atPath: directory.path) else { return }
         try FileManager.default.removeItem(at: directory)
     }
@@ -241,16 +244,63 @@ actor ImageCache {
         return CGImageSourceCreateImageAtIndex(source, 0, nil) != nil
     }
 
-    private func withConcurrencyLimit<T>(_ work: () async throws -> T) async throws -> T {
-        while activeDownloads >= maximumConcurrentDownloads {
-            await withCheckedContinuation { waiters.append($0) }
+    /// Waits for a download slot, and gives it up if the caller is cancelled.
+    ///
+    /// A plain `withCheckedContinuation` parks the caller with nothing able to wake it: a cancelled
+    /// task would sit here until some other download happened to finish. Sign-out and Reset Cache
+    /// both need waiting work to stop promptly, so the wait is cancellable and the waiter removes
+    /// itself.
+    private func acquireSlot() async throws {
+        try Task.checkCancellation()
+        guard activeDownloads >= maximumConcurrentDownloads else {
+            activeDownloads += 1
+            return
         }
-        activeDownloads += 1
-        defer {
+
+        let id = UUID()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                waiters[id] = continuation
+            }
+        } onCancel: {
+            Task { await self.abandonSlot(id) }
+        }
+        // Resumed by `releaseSlot`, which handed its slot over rather than freeing it, so the
+        // active count already accounts for this download.
+    }
+
+    private func abandonSlot(_ id: UUID) {
+        waiters.removeValue(forKey: id)?.resume(throwing: CancellationError())
+    }
+
+    /// Hands the slot to the next waiter rather than freeing and re-taking it, so the count cannot
+    /// drift and a waiter cannot be skipped.
+    private func releaseSlot() {
+        if let id = waiters.keys.first, let continuation = waiters.removeValue(forKey: id) {
+            continuation.resume()
+        } else {
             activeDownloads -= 1
-            if !waiters.isEmpty { waiters.removeFirst().resume() }
         }
+    }
+
+    private func withConcurrencyLimit<T>(_ work: () async throws -> T) async throws -> T {
+        try await acquireSlot()
+        defer { releaseSlot() }
         return try await work()
+    }
+
+    /// Stops every download in flight and waits for them to unwind.
+    ///
+    /// Downloads are shared between callers, so cancelling one caller cannot stop the transfer —
+    /// another caller may still be waiting on it. Clearing the cache or signing out has to stop
+    /// them explicitly, or files reappear in a directory that was just emptied.
+    func cancelInFlightDownloads() async {
+        let tasks = Array(inFlight.values)
+        inFlight.removeAll()
+        for task in tasks { task.cancel() }
+        for waiter in waiters.values { waiter.resume(throwing: CancellationError()) }
+        waiters.removeAll()
+        for task in tasks { _ = try? await task.value }
     }
 
     // MARK: - Decoding

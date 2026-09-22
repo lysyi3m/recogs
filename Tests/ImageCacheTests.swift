@@ -4,6 +4,39 @@ import Testing
 
 @Suite("ImageCache")
 struct ImageCacheTests {
+    @Test("Clearing the cache stops downloads in flight and leaves nothing behind")
+    func removeAllCancelsInFlightDownloads() async throws {
+        SlowProtocol.reset()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SlowProtocol.self]
+        let directory = URL.temporaryDirectory.appending(path: UUID().uuidString)
+        let cache = ImageCache(
+            directory: directory,
+            session: URLSession(configuration: configuration),
+            maximumConcurrentDownloads: 2
+        )
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        // More downloads than slots, so some are transferring and some are parked waiting.
+        let downloads = (1...6).map { id in
+            Task {
+                try await cache.localURL(
+                    releaseID: id,
+                    kind: .cover,
+                    remoteURL: URL(string: "https://i.discogs.com/\(id).jpeg")!
+                )
+            }
+        }
+        try await Task.sleep(for: .milliseconds(120))
+
+        try await cache.removeAll()
+
+        // A parked waiter with no way to wake would hang here; an untracked transfer would write
+        // its file after the directory was deleted.
+        for download in downloads { _ = try? await download.value }
+        #expect(await cache.statistics().fileCount == 0, "the cleared cache must stay cleared")
+    }
+
     @Test("The default directory is durable, not the purgeable caches directory")
     func defaultDirectoryIsApplicationSupport() {
         let directory = ImageCache.defaultDirectory()
@@ -33,6 +66,34 @@ struct ImageCacheTests {
 
     /// Serves a 1x1 PNG and counts how many times each URL is requested, so "never re-fetch" is a
     /// measurable claim rather than an assumption.
+    /// Serves a valid PNG, slowly, so downloads are still in flight when a test interrupts them.
+    final class SlowProtocol: URLProtocol, @unchecked Sendable {
+        nonisolated(unsafe) private static var cancelled = false
+        private static let lock = NSLock()
+
+        static func reset() {
+            lock.withLock { cancelled = false }
+        }
+
+        override class func canInit(with request: URLRequest) -> Bool { true }
+        override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+        override func startLoading() {
+            Thread.sleep(forTimeInterval: 0.4)
+            guard Self.lock.withLock({ !Self.cancelled }) else { return }
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil
+            )!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: CountingProtocol.pngBytes)
+            client?.urlProtocolDidFinishLoading(self)
+        }
+
+        override func stopLoading() {
+            Self.lock.withLock { Self.cancelled = true }
+        }
+    }
+
     final class CountingProtocol: URLProtocol, @unchecked Sendable {
         nonisolated(unsafe) static var requestCounts: [String: Int] = [:]
         nonisolated(unsafe) static var statusCode = 200
