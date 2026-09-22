@@ -20,6 +20,13 @@ Config/*.entitlements
 .build/
 .swiftpm/
 
+# ── Machine-local settings — never commit ──
+# .env holds the Team ID and any local secrets; `make generate` projects the Team ID into
+# Config/Local.xcconfig. .env.example is the tracked template.
+.env
+.env.local
+Config/Local.xcconfig
+
 # ── Coding-agent guidance is shared, not personal ──
 # The global ignore drops CLAUDE.md and .claude everywhere; both are project
 # guidance here. The shared allowlist is tracked, the per-machine one is not.
@@ -29,10 +36,5 @@ Config/*.entitlements
 .claude/settings.local.json
 
 # ── Repo-specific ──
-# Secrets — never commit.
-.env
-.env.local
 # Hand-written, not generated: iOS needs entitlements macOS rejects.
 !Config/Recogs-iOS.entitlements
-# Projected from .env by `make generate`; Config/Base.xcconfig includes it optionally.
-Config/Local.xcconfig

@@ -37,16 +37,17 @@ rejects them.
 ## Build & run
 
 ```bash
-brew install xcodegen   # one-time
-make generate           # regenerate Recogs.xcodeproj from project.yml
-open Recogs.xcodeproj   # then press ⌘R
+brew install xcodegen  # one-time
+cp .env.example .env   # one-time; set DEVELOPMENT_TEAM to your Apple Team ID
+make generate          # regenerate Recogs.xcodeproj from project.yml
+open Recogs.xcodeproj  # then press ⌘R
 ```
 
 Run `make` to list the other tasks (`test`, `build`, `build-ios`, `clean`).
 
-`Recogs.xcodeproj` is generated from [`project.yml`](project.yml); it is
-gitignored and must not be hand-edited. Code signing reads `DEVELOPMENT_TEAM`
-from `.env` — copy [`.env.example`](.env.example) and fill it in.
+`Recogs.xcodeproj` is generated from [`project.yml`](project.yml); it is gitignored and must not
+be hand-edited. `make generate` projects `DEVELOPMENT_TEAM` from `.env` into
+`Config/Local.xcconfig`, so Xcode and `xcodebuild` sign with the same team.
 
 ## Connecting to Discogs
 
