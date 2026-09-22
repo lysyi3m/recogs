@@ -113,6 +113,7 @@ public struct ContentView: View {
         } message: { item in
             Text("\(item.artistName) — \(item.title)\nThis removes the copy from Discogs. Other copies of the same release are unaffected.")
         }
+        .collectionFailureAlert(editor)
     }
 
     @ViewBuilder

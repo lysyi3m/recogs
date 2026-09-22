@@ -10,7 +10,23 @@ import Foundation
 @Observable
 final class CollectionEditor {
     private(set) var isWorking = false
-    private(set) var errorMessage: String?
+    private(set) var failure: Failure?
+
+    /// A write the user asked for that did not happen, and the operation that would try it again.
+    ///
+    /// Unlike a refresh, a write is something the user is waiting on, so it is worth interrupting
+    /// for — and an interruption is only worth it if it can offer the retry.
+    struct Failure: Identifiable {
+        let id = UUID()
+        let title: String
+        let message: String
+        let retry: @MainActor () async -> Void
+    }
+
+    /// The same failure as a status line, for the surfaces that show sync state alongside it.
+    var errorMessage: String? { failure?.message }
+
+    func clearFailure() { failure = nil }
 
     private let services: AppServices
 
@@ -31,8 +47,16 @@ final class CollectionEditor {
     ) async -> Bool {
         guard !isWorking, let client = services.client else { return false }
         isWorking = true
-        errorMessage = nil
+        failure = nil
         defer { isWorking = false }
+
+        func failed(_ error: any Error) {
+            failure = Failure(
+                title: "Couldn't add \(result.title)",
+                message: error.localizedDescription,
+                retry: { [weak self] in _ = await self?.add(result, folderID: folderID) }
+            )
+        }
 
         let provisionalID = PendingAddition.provisionalInstanceID()
         let pending = PendingAddition(from: result, instanceID: provisionalID, folderID: folderID)
@@ -40,7 +64,7 @@ final class CollectionEditor {
         do {
             try await services.store.insert(pending)
         } catch {
-            errorMessage = error.localizedDescription
+            failed(error)
             return false
         }
 
@@ -56,7 +80,7 @@ final class CollectionEditor {
                 releaseID: result.id
             )
         } catch {
-            errorMessage = error.localizedDescription
+            failed(error)
             try? await services.store.deleteItem(instanceID: provisionalID)
             return false
         }
@@ -83,14 +107,22 @@ final class CollectionEditor {
     func remove(instanceID: Int) async -> Bool {
         guard !isWorking, let client = services.client else { return false }
         isWorking = true
-        errorMessage = nil
+        failure = nil
         defer { isWorking = false }
+
+        func failed(_ error: any Error, title: String) {
+            failure = Failure(
+                title: title,
+                message: error.localizedDescription,
+                retry: { [weak self] in _ = await self?.remove(instanceID: instanceID) }
+            )
+        }
 
         let snapshot: CollectionItemSnapshot?
         do {
             snapshot = try await services.store.item(instanceID: instanceID)
         } catch {
-            errorMessage = error.localizedDescription
+            failed(error, title: "Couldn't remove the copy")
             return false
         }
         guard let snapshot else { return false }
@@ -98,7 +130,7 @@ final class CollectionEditor {
         do {
             try await services.store.deleteItem(instanceID: instanceID)
         } catch {
-            errorMessage = error.localizedDescription
+            failed(error, title: "Couldn't remove \(snapshot.title)")
             return false
         }
 
@@ -112,7 +144,7 @@ final class CollectionEditor {
             )
             return true
         } catch {
-            errorMessage = error.localizedDescription
+            failed(error, title: "Couldn't remove \(snapshot.title)")
             try? await services.store.restore(snapshot)
             return false
         }

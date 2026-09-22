@@ -23,7 +23,7 @@ struct AddRecordView: View {
         NavigationStack {
             VStack(spacing: 0) {
                 searchField
-                if let message = noTokenMessage ?? editor?.errorMessage {
+                if let message = noTokenMessage {
                     banner(message)
                 }
                 if editor?.isWorking == true {
@@ -59,6 +59,7 @@ struct AddRecordView: View {
             }
         }
         .onDisappear { search?.cancel() }
+        .collectionFailureAlert(editor)
         .alert(
             "Add this pressing?",
             isPresented: Binding(

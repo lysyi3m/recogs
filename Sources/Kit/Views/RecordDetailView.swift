@@ -29,11 +29,6 @@ struct RecordDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
                 header
-                if let message = editor?.errorMessage {
-                    Label(message, systemImage: "exclamationmark.triangle.fill")
-                        .font(.callout)
-                        .foregroundStyle(.red)
-                }
                 facts
                 tracklist
                 notes
@@ -68,6 +63,7 @@ struct RecordDetailView: View {
         } message: {
             Text("\(item.artistName) — \(item.title)\nThis removes the copy from Discogs. Other copies of the same release are unaffected.")
         }
+        .collectionFailureAlert(editor)
     }
 
     // MARK: - Actions
