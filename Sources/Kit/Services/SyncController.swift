@@ -20,6 +20,9 @@ final class SyncController {
     private(set) var activity: String?
 
     private unowned let services: AppServices
+    /// The sync currently in flight, so work tied to the account can be stopped before the account
+    /// goes away. Held because `runSync` deliberately shields the work from its caller.
+    private var running: Task<Void, Never>?
     private static let lastSyncedKey = "lastSyncedAt"
 
     init(services: AppServices) {
@@ -51,9 +54,24 @@ final class SyncController {
     ///
     /// `.refreshable` cancels its task the moment the refresh control retracts, and a collection
     /// fetch that is cancelled mid-stream returns no pages at all. A refresh the user asked for is
-    /// worth finishing.
+    /// worth finishing. The task is kept so `cancelAndWait` can still stop it deliberately — being
+    /// shielded from the caller is not the same as being unstoppable.
     private func runSync() async {
-        await Task { await self.performSync() }.value
+        let task = Task { await self.performSync() }
+        running = task
+        await task.value
+        running = nil
+    }
+
+    /// Stops any sync in flight and waits for it to finish unwinding.
+    ///
+    /// Sign-out clears the token and the cache; a sync still running would otherwise write the old
+    /// account's records back into the store behind it. A cancelled fetch throws rather than
+    /// pruning, so nothing is half-applied.
+    func cancelAndWait() async {
+        guard let task = running else { return }
+        task.cancel()
+        await task.value
     }
 
     enum ResetError: LocalizedError {

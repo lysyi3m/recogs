@@ -109,9 +109,13 @@ public final class AppServices {
     /// Disconnects the account and leaves the app as it was before first run: no token, no cached
     /// collection, no cover art.
     func signOut() async throws {
+        // Order matters. Dropping the client first means nothing can build a new syncer while this
+        // runs; cancelling then drains the one already in flight. Clearing the cache before either
+        // would let that sync write the old account's records back in behind us.
+        client = nil
+        await syncController.cancelAndWait()
         try await resetCache()
         try tokenStore.delete()
-        client = nil
         cachedUsername = nil
         accountUsername = nil
         maskedToken = nil
