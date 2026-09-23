@@ -1,5 +1,8 @@
 import DiscogsKit
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 /// App settings: what is cached, which account it came from, and the notices about both.
 ///
@@ -245,7 +248,10 @@ struct AccountSettingsView: View {
 
 // MARK: - About
 
-/// The Discogs affiliation notice and the privacy policy.
+/// Name and version, the privacy policy, and the affiliation notice the Discogs terms require.
+///
+/// The notice's wording is fixed by the Discogs API Terms of Use, so it is presented as fine print
+/// under the links rather than reworded.
 struct AboutSettingsView: View {
     var body: some View {
         #if os(macOS)
@@ -257,12 +263,39 @@ struct AboutSettingsView: View {
 
     @ViewBuilder
     private var sections: some View {
-        Section("About") {
+        Section {
+            HStack(spacing: 14) {
+                #if os(macOS)
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .frame(width: 56, height: 56)
+                #endif
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(Self.appName).font(.headline)
+                    Text(Self.version).font(.callout).foregroundStyle(.secondary)
+                }
+            }
+        }
+
+        Section {
+            Link("Privacy Policy", destination: AppLinks.privacyPolicy)
+        } footer: {
             Text(DiscogsNotice.affiliation)
-                .font(.callout)
+                .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Link("Privacy Policy", destination: AppLinks.privacyPolicy)
         }
+    }
+
+    private static var appName: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+            ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
+            ?? "Recogs"
+    }
+
+    private static var version: String {
+        let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+        return "Version \(short) (\(build))"
     }
 }

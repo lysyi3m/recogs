@@ -116,7 +116,9 @@ struct CollectionView: View {
                             .rowHoverHighlight(id: item.id, hovered: $hoveredID)
                     }
                 } footer: {
-                    credit
+                    // The list keeps trailing space under its last section, so padding the top
+                    // alone centres the credit between the last row and the window's bottom edge.
+                    credit.padding(.top, 14)
                 }
             }
             #if os(macOS)
@@ -163,6 +165,7 @@ struct CollectionView: View {
 
     private var credit: some View {
         DiscogsCredit(destination: DiscogsNotice.collectionURL(username: services.accountUsername))
+            .frame(maxWidth: .infinity)
     }
 
     #if os(iOS)
