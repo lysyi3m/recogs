@@ -100,4 +100,5 @@ marketplace prices, and stats.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE). The name and the app icon are not covered; see
+[TRADEMARKS.md](TRADEMARKS.md).
