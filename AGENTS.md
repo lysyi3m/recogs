@@ -28,6 +28,10 @@ contradicts a rule here, the repo-specific rule wins — and say so when you not
   `make generate` projects it into the git-ignored `Config/Local.xcconfig`, which
   `Config/Base.xcconfig` includes, so `xcodebuild` and ⌘R sign with the same team. Never pass
   the team on the command line or commit it.
+- **One slug per app.** Lowercase the app name and turn spaces into hyphens (`PDF Unpack` →
+  `pdf-unpack`). The slug is the repo name, the App Store Connect SKU, and the last part of the
+  bundle ID, `com.mlkshkvch.<slug>`; other targets append to it (`…<slug>.kit`). The bundle ID
+  and SKU are permanent once a build is uploaded.
 - **One word per concept.** The Terminology section is binding for UI strings, code
   identifiers and docs alike. Do not introduce synonyms for variety.
 
