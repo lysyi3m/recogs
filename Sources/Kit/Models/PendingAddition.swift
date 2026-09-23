@@ -4,7 +4,7 @@ import Foundation
 /// A copy being added, described well enough to render in the grid before Discogs confirms it.
 ///
 /// The optimistic insert is built from the search result, which is all the app knows at that point.
-/// Search titles are a combined `Artist - Album`, so the split can be imperfect; the release fetch
+/// Search titles are a combined `Artist - Title`, so the split can be imperfect; the release fetch
 /// that follows a successful add corrects it.
 struct PendingAddition: Sendable, Hashable {
     var instanceID: Int

@@ -1,5 +1,5 @@
 # Recogs — XcodeGen project spec. Regenerate with `make generate`.
-# One multiplatform SwiftUI app target over the local DiscogsKit package.
+# A multiplatform SwiftUI app over the RecogsKit framework and the local DiscogsKit package.
 
 name: Recogs
 

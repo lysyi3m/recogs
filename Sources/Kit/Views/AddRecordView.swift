@@ -52,8 +52,8 @@ struct AddRecordView: View {
     }
 
     /// A macOS sheet has no navigation bar worth the name: a title strip, a search strip and a
-    /// button strip give it three horizontal rules and no hierarchy. The title sits with the
-    /// control it introduces, and one rule separates the query from its results.
+    /// button strip give it three horizontal rules and no hierarchy. The sheet has no title strip,
+    /// and one rule separates the query from its results.
     @ViewBuilder
     private var sheet: some View {
         #if os(macOS)
@@ -270,10 +270,11 @@ private struct SearchResultRow: View {
 
 private extension SearchResult {
     /// The details that separate one edition from another. Richer than the collection's row:
-    /// picking the right one out of a page of near-identical results is exactly what the label and
-    /// catalogue number are for.
+    /// picking the right one out of a page of near-identical results is what the label and catalog
+    /// number are for.
     ///
-    /// Built once, so the confirmation always describes precisely the row that was tapped.
+    /// The row and the confirmation both read this property, so the confirmation describes the
+    /// row that was tapped.
     var editionDetails: String {
         ReleaseRow.details([
             year.map(String.init),

@@ -36,7 +36,7 @@ test: test-package test-app ## Run every test suite
 test-package: ## Run the DiscogsKit unit tests
 	swift test --package-path $(PACKAGE)
 
-test-app: generate ## Run the app's cache and image tests
+test-app: generate ## Run the RecogsKit tests
 	xcodebuild test -project "$(PROJECT)" -scheme "$(SCHEME)" \
 		-destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO
 

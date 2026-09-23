@@ -113,7 +113,7 @@ public final class AppServices {
     func signOut() async throws {
         // Order matters. Dropping the client first means nothing can build a new syncer while this
         // runs; cancelling then drains the one already in flight. Clearing the cache before either
-        // would let that sync write the old account's records back in behind us.
+        // would let that sync write the old account's records back into the cleared cache.
         //
         // The cache and Keychain steps can both throw, and a half-signed-out app — no client, but
         // the token still stored — is a state with no way out through the UI. If either fails the

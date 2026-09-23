@@ -20,7 +20,7 @@ public struct ContentView: View {
     @State private var editor: CollectionEditor?
     @State private var pendingRemoval: CachedCollectionItem?
     #if os(iOS)
-    // iOS has no Settings scene, so it gets a toolbar button and a sheet instead.
+    /// iOS has no Settings scene, so it gets a toolbar button and a sheet instead.
     @State private var isShowingSettings = false
     #endif
 
@@ -84,7 +84,7 @@ public struct ContentView: View {
         .toolbarBackground(.visible, for: .windowToolbar)
         #endif
         #if os(macOS)
-        // Outside the stack, so the status stays visible on the record detail too.
+        // Outside the stack, so the status stays visible on the record page too.
         .safeAreaInset(edge: .bottom) { statusBar }
         #endif
         // Menu commands act here, where the state they drive lives.
@@ -272,7 +272,7 @@ public struct ContentView: View {
     // The bottom bar is a desktop affordance: a window has the room for a persistent strip of
     // state, and grid density only makes sense where the window can be any width. On a phone the
     // grid is two columns wide by definition, pull-to-refresh reports the sync, and the bar is
-    // just a stolen row.
+    // a stolen row.
     #if os(macOS)
 
     /// One row: what you can change on the left, what is happening on the right.
@@ -280,7 +280,7 @@ public struct ContentView: View {
     private var statusBar: some View {
         if services.hasToken {
             VStack(spacing: 0) {
-                // Without this the bar is invisible against the record detail's light background.
+                // Without this the bar is invisible against the record page's light background.
                 Divider()
                 barContents
             }
@@ -290,8 +290,8 @@ public struct ContentView: View {
 
     private var barContents: some View {
         HStack(spacing: 12) {
-            // The density control sizes grid cells, so it goes away on the detail screen and in
-            // the list, which has nothing to size.
+            // The density control sizes grid cells, so it goes away on the record page and in the
+            // list, which has nothing to size.
             if selection == nil, layout == .grid { densityControls }
             Spacer(minLength: 12)
             syncStatus
@@ -314,7 +314,7 @@ public struct ContentView: View {
     }
 
     /// Reads as a plain count normally, and says how much of the collection is showing while a
-    /// search narrows it. Built as `Text` so the inflection markup is actually resolved.
+    /// search narrows it. Built as `Text` so the inflection markup is resolved.
     @ViewBuilder
     private var countLabel: some View {
         if searchQuery.isEmpty {
@@ -386,7 +386,7 @@ public struct ContentView: View {
 
 /// The collection search field, present only once there is a collection to search.
 ///
-/// `.searchable` cannot be applied conditionally on its own, so applying it unconditionally put a
+/// `.searchable` cannot be applied conditionally on its own. Applied unconditionally, it puts a
 /// search field on the onboarding screen, where there is nothing to search.
 private struct CollectionSearchField: ViewModifier {
     let isEnabled: Bool

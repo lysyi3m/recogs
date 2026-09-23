@@ -175,7 +175,7 @@ final class CollectionEditor {
 
     /// Settles a write whose outcome Discogs never confirmed, by asking Discogs what is true.
     ///
-    /// A sync is authoritative: it reconciles the whole folder by `instance_id`. If it cannot run —
+    /// A sync is authoritative: it reconciles the whole collection by `instance_id`. If it cannot run —
     /// offline, most likely — the outcome stays genuinely unknown, and saying so is better than
     /// offering a retry that might duplicate the copy.
     private func reconcileAdd(

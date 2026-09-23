@@ -14,8 +14,8 @@ public enum DiscogsError: Error, Sendable {
 }
 
 extension DiscogsError {
-    /// True when the request never reached Discogs. The app stays usable from cache in this state,
-    /// so it is worth distinguishing from a server-side failure.
+    /// True when the request failed for lack of a working connection. The app stays usable from
+    /// cache in this state, so it is worth distinguishing from a server-side failure.
     public var isOffline: Bool {
         guard case .transport(let underlying) = self,
               let urlError = underlying as? URLError else { return false }
@@ -47,7 +47,7 @@ extension DiscogsError {
         return false
     }
 
-    /// Whether a write that failed with this error definitely did not reach Discogs.
+    /// Whether Discogs definitely did not apply a write that failed with this error.
     ///
     /// A write is not a read: rolling the local change back is only safe when the server is known
     /// to have rejected it. A request that timed out, lost its connection, or met a 5xx may well
@@ -56,7 +56,7 @@ extension DiscogsError {
     public var didNotReachDiscogs: Bool {
         switch self {
         case .unauthorized, .notFound, .invalidURL:
-            // Answered, and the answer was no.
+            // Answered, and the answer was no. An invalid URL is never sent.
             return true
         case .rateLimited:
             // Refused without being processed, and only after the retries are spent.

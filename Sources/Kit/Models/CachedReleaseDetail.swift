@@ -21,9 +21,10 @@ struct CachedTrack: Codable, Sendable, Hashable, Identifiable {
     }
 }
 
-/// The full release behind a collection item, fetched on first open and kept afterwards.
+/// The full release behind a record, fetched on first open and again once it passes
+/// `Freshness.maximumAge`.
 ///
-/// Keyed by `releaseID`, not `instanceID`: two copies of the same release share one detail record.
+/// Keyed by `releaseID`, not `instanceID`: two copies of the same release share one cached detail.
 @Model
 final class CachedReleaseDetail {
     @Attribute(.unique) var releaseID: Int
@@ -41,7 +42,7 @@ final class CachedReleaseDetail {
     var tracks: [CachedTrack]
     var coverURL: String?
     var discogsURL: String?
-    /// When this record was fetched. A record older than `Freshness.maximumAge` is fetched again.
+    /// When this release was fetched. A release older than `Freshness.maximumAge` is fetched again.
     var fetchedAt: Date
 
     init(from release: Release) {

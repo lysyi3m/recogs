@@ -5,7 +5,7 @@ import SwiftUI
 /// the Keychain, then hand off to the initial sync.
 ///
 /// The token is the only thing standing between a fresh install and a working collection, so the
-/// screen explains where to get one rather than just presenting an empty field.
+/// screen explains where to get one rather than presenting an empty field.
 struct SetupView: View {
     /// Called once a token has been validated and saved, so the collection can do its first sync.
     var onSignedIn: () -> Void = {}

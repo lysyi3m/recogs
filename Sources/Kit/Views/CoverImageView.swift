@@ -22,8 +22,8 @@ struct CoverImageView: View {
     let edge: CGFloat
 
     @Environment(AppServices.self) private var services
-    /// The scale of the display actually showing this view. `UIScreen.main` assumed one screen and
-    /// is deprecated; this follows the window the cover is drawn in.
+    /// The scale of the display showing this view. It follows the window the cover is drawn in;
+    /// `UIScreen.main` assumes one screen and is deprecated.
     @Environment(\.displayScale) private var displayScale
     @State private var image: PlatformImage?
     @State private var didFail = false
@@ -44,8 +44,9 @@ struct CoverImageView: View {
                     }
             }
         }
-        // The URL is part of the identity: a record detail starts with the collection's cover and
-        // switches to the release's own once that arrives, and the load has to follow it.
+        // The URL is part of the identity: for a copy with no `cover_image`, the record page starts
+        // with the collection's thumb and switches to the release's cover once that arrives, and
+        // the load has to follow it.
         .task(id: TaskKey(releaseID: releaseID, kind: kind, url: remoteURL, edge: bucketedEdge)) {
             await load()
         }

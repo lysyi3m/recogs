@@ -45,7 +45,7 @@ struct CacheResetTests {
         #expect(try await services.store.itemCount() == 2, "the cache must survive a failed reset")
     }
 
-    @Test("The failure says nothing was deleted, rather than implying data is gone")
+    @Test("A reset without a token fails with a message that names the cause")
     func failureMessageIsReassuring() async throws {
         let services = try makeServices()
         do {

@@ -2,8 +2,9 @@ import SwiftUI
 
 /// One record: cover, the facts that identify the edition, and its tracklist on request.
 ///
-/// The collection snapshot already holds everything that identifies an edition, so the page is
-/// complete the moment it opens. Only the tracklist needs Discogs, and only when it is opened.
+/// The collection snapshot holds what identifies an edition — title, artist, label and catalog
+/// number — so the page has content the moment it opens. One release fetch on open adds the
+/// tracklist, notes, release date and country.
 struct RecordDetailView: View {
     let item: CachedCollectionItem
 
@@ -60,8 +61,8 @@ struct RecordDetailView: View {
             // A page left open refreshes itself once its data passes six hours old.
             await loader.keepFresh(releaseID: item.releaseID)
         }
-        // An alert rather than a confirmation dialog: raised from the toolbar menu, a dialog is
-        // presented as a popover anchored to that menu and inherits its width, which crams the
+        // An alert rather than a confirmation dialog. Raised from the toolbar menu, a dialog is
+        // presented as a popover anchored to that menu and inherits its width. That crams the
         // message into a few words per line and hides the cancel button behind a tap outside.
         .alert(
             "Remove this copy?",
@@ -82,7 +83,7 @@ struct RecordDetailView: View {
     // MARK: - Actions
 
     /// Record-scoped actions live in the toolbar rather than the page body: they are about the
-    /// record rather than part of it, and this is where the folder actions will go too.
+    /// record rather than part of it.
     @ToolbarContentBuilder
     private var actions: some ToolbarContent {
         ToolbarItem {
@@ -114,11 +115,10 @@ struct RecordDetailView: View {
 
     /// Which image to show, and which cache slot it belongs in.
     ///
-    /// The grid and this page share one cache slot per release, so they have to agree on the URL —
-    /// otherwise whichever opens first decides what is stored until Discogs changes it, and the
-    /// same record caches a different image depending on how it was reached. The collection's
-    /// `cover_image` wins; the release's own full-size image is the fallback for a copy that has
-    /// none.
+    /// The grid and this page share one cache slot per release, so they have to agree on the URL.
+    /// Otherwise each reads the other's URL as a changed image and downloads the slot again. The
+    /// collection's `cover_image` wins; the release's own full-size image is the fallback for a
+    /// copy that has none.
     ///
     /// When neither exists the thumb is shown, but as a thumb — writing it into the cover slot
     /// would cache a 150px image as this release's cover for as long as its URL stands.
@@ -193,8 +193,8 @@ struct RecordDetailView: View {
 
     // MARK: - Facts
 
-    /// The edition details, as a wrapping grid rather than a column of full-width rows: seven
-    /// two-word facts do not need seven lines of a wide window.
+    /// The edition details, as a wrapping grid rather than a column of full-width rows: five short
+    /// facts do not need five lines of a wide window.
     @ViewBuilder
     private var facts: some View {
         let entries = factEntries

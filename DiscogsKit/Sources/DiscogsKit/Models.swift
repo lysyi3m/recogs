@@ -257,7 +257,7 @@ public struct Release: Codable, Sendable, Hashable {
         formats.map(\.displayName).joined(separator: ", ")
     }
 
-    /// Highest-resolution cover: the primary image if Discogs marks one, else the first.
+    /// The cover: the primary image if Discogs marks one, else the first.
     public var primaryImage: ReleaseImage? {
         images.first { $0.type == "primary" } ?? images.first
     }
@@ -334,12 +334,12 @@ public struct SearchPage: Codable, Sendable {
 /// One hit from `GET /database/search`.
 ///
 /// Search results are shaped differently from collection items: the title is a single
-/// `Artist - Album` string, and `year` arrives as text, so both need unpicking before they can fill
+/// `Artist - Title` string, and `year` arrives as text, so both need unpicking before they can fill
 /// the cache.
 public struct SearchResult: Codable, Sendable, Hashable, Identifiable {
     public let id: Int
     public let type: String
-    /// Combined `Artist - Album`.
+    /// Combined `Artist - Title`.
     public let title: String
     public let thumb: String?
     public let coverImage: String?
