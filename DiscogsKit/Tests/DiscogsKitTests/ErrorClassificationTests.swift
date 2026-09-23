@@ -42,6 +42,14 @@ struct ErrorClassificationTests {
         #expect(message == "No connection to Discogs.")
     }
 
+    @Test("A rejected token reads as one short line, whatever Discogs sent")
+    func unauthorizedMessage() throws {
+        let error = DiscogsError.unauthorized(
+            message: "Invalid consumer token. Please register an app before making requests."
+        )
+        #expect(try #require(error.errorDescription) == "Discogs rejected the token.")
+    }
+
     @Test("A rate-limit message names the wait")
     func rateLimitMessage() throws {
         let message = try #require(DiscogsError.rateLimited(retryAfter: 30).errorDescription)
