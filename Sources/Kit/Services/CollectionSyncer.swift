@@ -128,7 +128,13 @@ actor CollectionSyncer {
         await withTaskGroup(of: Bool.self) { group in
             for target in targets {
                 group.addTask { [imageCache] in
-                    if await imageCache.isCached(releaseID: target.releaseID, kind: target.kind) {
+                    // Checked against the source, so art whose URL changed is downloaded again and
+                    // covers follow Discogs on the same schedule as the rest of the collection.
+                    if await imageCache.isCached(
+                        releaseID: target.releaseID,
+                        kind: target.kind,
+                        source: target.url
+                    ) {
                         return false
                     }
                     do {

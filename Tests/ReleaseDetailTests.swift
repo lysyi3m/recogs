@@ -36,6 +36,28 @@ struct ReleaseDetailTests {
         return try DiscogsClient.makeDecoder().decode(Release.self, from: Data(json.utf8))
     }
 
+    @Test("A stale page loads again on the next call instead of keeping its first copy")
+    @MainActor
+    func stalePageReloads() async throws {
+        // No token, so a stale copy cannot be refreshed from Discogs and the cached one is shown.
+        let services = AppServices(
+            modelContainer: try AppServices.makeModelContainer(inMemory: true),
+            tokenStore: TokenStore(service: "com.mlkshkvch.recogs.tests.\(UUID().uuidString)"),
+            imageCache: ImageCache(directory: URL.temporaryDirectory.appending(path: UUID().uuidString))
+        )
+        try await services.store.upsertReleaseDetail(makeRelease(title: "First"))
+        let sevenHoursLater = Date.now.addingTimeInterval(7 * 3600)
+        let loader = ReleaseDetailLoader(services: services, now: { sevenHoursLater })
+
+        await loader.load(releaseID: 1373891)
+        #expect(loader.snapshot?.title == "First", "offline, a stale copy is still shown")
+        #expect(loader.staleSince != nil, "and the page discloses its own age")
+
+        try await services.store.upsertReleaseDetail(makeRelease(title: "Second"))
+        await loader.load(releaseID: 1373891)
+        #expect(loader.snapshot?.title == "Second", "a loaded page must not stay on its first copy")
+    }
+
     @Test("A release detail round-trips through the cache")
     func roundTrip() async throws {
         let store = try makeStore()

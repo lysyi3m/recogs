@@ -101,6 +101,9 @@ public struct ContentView: View {
             if editor == nil { editor = services.makeEditor() }
             // On-launch delta, skipped when a sync ran moments ago.
             if syncController.shouldSyncOnLaunch { await syncController.sync() }
+            // Then re-sync whenever the collection passes six hours old, for as long as the
+            // window is open.
+            await syncController.keepFresh()
         }
         // Matches the record page: raised from a context menu, a confirmation dialog is presented
         // as a popover anchored to that menu and inherits its width.
@@ -248,11 +251,18 @@ public struct ContentView: View {
         }
         if syncController.isSyncing { return "Syncing…" }
         if let errorMessage = editor?.errorMessage ?? syncController.errorMessage { return errorMessage }
-        if syncController.isOffline { return "Offline" }
+        if syncController.isOffline { return offlineStatus }
         guard let lastSyncedAt = syncController.lastSyncedAt else { return "Not synced yet" }
         return "Updated \(lastSyncedAt.formatted(.relative(presentation: .named)))"
     }
     #endif
+
+    /// Offline, the cache stays on screen, so its age is part of the status: the Discogs terms
+    /// bound how stale displayed data may be. See `Freshness`.
+    private var offlineStatus: String {
+        guard let lastSyncedAt = syncController.lastSyncedAt else { return "Offline" }
+        return "Offline · updated \(lastSyncedAt.formatted(.relative(presentation: .named)))"
+    }
 
     private var initialSyncStatus: String {
         guard let progress = syncController.progress else { return "Fetching collection…" }
@@ -355,7 +365,7 @@ public struct ContentView: View {
                 .truncationMode(.tail)
                 .help(errorMessage)
         } else if syncController.isOffline {
-            Label("Offline", systemImage: "wifi.slash")
+            Label(offlineStatus, systemImage: "wifi.slash")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)

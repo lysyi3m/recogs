@@ -73,9 +73,14 @@ EPs Discogs is full of. The label/catalogue/country block on the record page is 
 
 ## Caching
 
-- Cache images permanently on disk, keyed by release id and size. The grid and the record page
-  both draw `cover_image` (600px, quality 90); the 150px thumb is a fallback and a row icon.
-  Never re-fetch.
+- **Nothing shown may be more than six hours older than Discogs** (API Terms of Use; covers
+  count too). `Freshness.maximumAge` is the one constant. The collection re-syncs when it passes
+  that age, a record detail is fetched again, and each image records its source URL and is
+  fetched again when that URL changes. Offline, the cache stays on screen with its age shown:
+  the collection's in the status line, a stale record's details on the record page.
+- Cache images on disk, keyed by release id and size. The grid and the record page both draw
+  `cover_image` (600px, quality 90); the 150px thumb is a fallback and a row icon. A file is
+  fetched again only when its URL changes, never because it is old.
 - SwiftData holds every collection item so the collection is browsable offline.
 - Cover art lives in Application Support, not Caches, so the system cannot evict it.
 

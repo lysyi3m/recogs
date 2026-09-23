@@ -166,7 +166,7 @@ final class CachedCollectionItem {
     /// about 20 KB, so it is worth using everywhere the art is more than a row icon.
     ///
     /// The kind follows the URL: caching a 150px thumb in the cover slot would fix this release's
-    /// cover as a thumb permanently, and nothing would replace it.
+    /// cover as a thumb for as long as its URL stands, and nothing would replace it.
     var artwork: (url: String?, kind: ImageCache.Kind) {
         if let coverURL, !coverURL.isEmpty { return (coverURL, .cover) }
         return (thumbURL, .thumb)

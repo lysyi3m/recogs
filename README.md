@@ -76,7 +76,12 @@ throttle that reads the `X-Discogs-Ratelimit*` headers, holds back a safety
 margin, and backs off on `429`. Cover art is exempt — measured against the live
 API, the image CDN returns no rate-limit headers and does not consume the
 budget — so images are bounded by their own concurrency cap instead. They are
-cached on disk permanently and never re-fetched.
+cached on disk and fetched again only when Discogs reports a new image.
+
+The Discogs terms forbid showing data more than six hours older than discogs.com,
+so the collection re-syncs every six hours and a record page older than that is
+fetched again. Offline, the cache stays browsable and the status line shows its
+age.
 
 ## Project structure
 
