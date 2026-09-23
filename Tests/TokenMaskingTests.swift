@@ -25,7 +25,7 @@ struct TokenMaskingTests {
 
     @Test("Masking never returns the token itself")
     func neverReturnsInput() {
-        let token = "EEfLdnqTUpPzudgUOtHENjStAYipBQyNvStKjDWm"
+        let token = "0123456789abcdefghijklmnopqrstuvwxyzABCD"
         #expect(AppServices.mask(token) != token)
     }
 }
