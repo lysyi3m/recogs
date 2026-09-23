@@ -1,7 +1,10 @@
 import DiscogsKit
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
-/// App settings. Two concerns: what is cached, and which account it came from.
+/// App settings: what is cached, which account it came from, and the notices about both.
 ///
 /// macOS presents these as tabs in the Settings window; iOS as sections in a sheet.
 public struct SettingsView: View {
@@ -19,8 +22,10 @@ public struct SettingsView: View {
                 .tabItem { Label("Collection", systemImage: "square.grid.2x2") }
             AccountSettingsView(onSignedOut: onSignedOut)
                 .tabItem { Label("Account", systemImage: "person.crop.circle") }
+            AboutSettingsView()
+                .tabItem { Label("About", systemImage: "info.circle") }
         }
-        // Tall enough for the Collection tab, which is the longer of the two; a short window
+        // Tall enough for the Collection tab, which is the longest of the three; a short window
         // hides its first section behind the tab bar.
         .frame(width: 520, height: 420)
         #else
@@ -28,6 +33,7 @@ public struct SettingsView: View {
             Form {
                 CollectionSettingsView()
                 AccountSettingsView(onSignedOut: onSignedOut)
+                AboutSettingsView()
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -237,5 +243,59 @@ struct AccountSettingsView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+}
+
+// MARK: - About
+
+/// Name and version, the privacy policy, and the affiliation notice the Discogs terms require.
+///
+/// The notice's wording is fixed by the Discogs API Terms of Use, so it is presented as fine print
+/// under the links rather than reworded.
+struct AboutSettingsView: View {
+    var body: some View {
+        #if os(macOS)
+        Form { sections }.formStyle(.grouped)
+        #else
+        sections
+        #endif
+    }
+
+    @ViewBuilder
+    private var sections: some View {
+        Section {
+            HStack(spacing: 14) {
+                #if os(macOS)
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .frame(width: 56, height: 56)
+                #endif
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(Self.appName).font(.headline)
+                    Text(Self.version).font(.callout).foregroundStyle(.secondary)
+                }
+            }
+        }
+
+        Section {
+            Link("Privacy Policy", destination: AppLinks.privacyPolicy)
+        } footer: {
+            Text(DiscogsNotice.affiliation)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private static var appName: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+            ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String
+            ?? "Recogs"
+    }
+
+    private static var version: String {
+        let short = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+        return "Version \(short) (\(build))"
     }
 }

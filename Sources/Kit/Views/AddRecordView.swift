@@ -221,8 +221,11 @@ struct AddRecordView: View {
                         .rowHoverHighlight(id: result.id, hovered: $hoveredResultID)
                     }
                 } footer: {
-                    if total > results.count {
-                        Text("Showing \(results.count) of \(total) matches.")
+                    VStack(alignment: .leading, spacing: 4) {
+                        if total > results.count {
+                            Text("Showing \(results.count) of \(total) matches.")
+                        }
+                        DiscogsCredit(destination: DiscogsNotice.searchURL(query: query))
                     }
                 }
             }

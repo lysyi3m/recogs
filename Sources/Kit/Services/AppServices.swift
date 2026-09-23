@@ -48,7 +48,9 @@ public final class AppServices {
         return identity.username
     }
 
-    private func rememberUsername(_ username: String) {
+    /// Also called after every sync, which resolves the username anyway. An install that has a
+    /// token but no stored name — the Discogs credit's link needs one — picks it up there.
+    func rememberUsername(_ username: String) {
         cachedUsername = username
         accountUsername = username
         UserDefaults.standard.set(username, forKey: Self.usernameKey)

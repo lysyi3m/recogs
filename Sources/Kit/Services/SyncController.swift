@@ -154,6 +154,7 @@ final class SyncController {
                 Task { @MainActor in self.progress = update }
             }
             lastSummary = summary
+            services.rememberUsername(summary.username)
             isOffline = false
             lastSyncedAt = Date()
             UserDefaults.standard.set(lastSyncedAt, forKey: Self.lastSyncedKey)
