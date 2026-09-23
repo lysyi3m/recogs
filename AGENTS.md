@@ -83,8 +83,10 @@ commit `.env`.
   the call site. Verify the installed binary with `Scripts/verify-installed.sh <udid>`.
 - **Inspect simulator state instead of guessing** — read the app's store and defaults from the
   simulator container.
-- **App icons must stay full-bleed.** macOS 26 applies its own mask; a pre-masked asset gets
-  masked twice. `assets/icon.png` for the README is the exception — nothing masks it on GitHub.
+- **Check app icons by rendering them.** macOS 26 masks this app's full-bleed square icon, and
+  it draws a pre-masked icon on Apple's 824-on-1024 grid as-is, so both render correctly. Before
+  changing icon assets, render `NSWorkspace.shared.icon(forFile:)` for the built app and compare.
+  `assets/icon.png` for the README is masked by hand — GitHub shows a PNG as-is.
 - **Privacy manifest keys are unvalidated.** `plutil` and Xcode accept a wrong key silently.
   Check `Config/PrivacyInfo.xcprivacy` against Apple's documentation, not against a clean build.
 - `LD_RUNPATH_SEARCH_PATHS` carries a macOS-specific variant in `project.yml`. XcodeGen emits
