@@ -76,10 +76,8 @@ extension DiscogsError {
 extension DiscogsError: LocalizedError {
     public var errorDescription: String? {
         switch self {
-        case .unauthorized:
-            // Discogs' own text ("Invalid consumer token. Please register an app before making
-            // requests.") is long and speaks to API developers. The status line needs the fix.
-            return "Discogs rejected the token."
+        case .unauthorized(let message):
+            return message ?? "Discogs rejected the token."
         case .notFound(let message):
             return message ?? "Not found."
         case .rateLimited(let retryAfter):
