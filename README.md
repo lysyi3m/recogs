@@ -10,6 +10,12 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/lysyi3m/recogs/actions/workflows/ci.yml">
+    <img src="https://github.com/lysyi3m/recogs/actions/workflows/ci.yml/badge.svg" alt="CI">
+  </a>
+</p>
+
+<p align="center">
   <img src="assets/screenshot-collection.png" alt="The collection as a wall of covers" width="49%">
   <img src="assets/screenshot-record.png" alt="A record's detail page" width="49%">
 </p>
