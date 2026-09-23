@@ -104,6 +104,15 @@ struct CollectionStoreTests {
         #expect(changed == [ImageCache.Slot(releaseID: 100, kind: .cover)])
     }
 
+    @Test("A cover appearing where there was none is reported, because the slot may hold a fallback")
+    func upsertReportsNewlyAppearingCover() async throws {
+        let store = try makeStore()
+        try await store.upsert([makeItem(instanceID: 1, cover: "")])
+
+        let appeared = try await store.upsert([makeItem(instanceID: 1, cover: "https://i.discogs.com/first.jpeg")])
+        #expect(appeared == [ImageCache.Slot(releaseID: 100, kind: .cover)])
+    }
+
     @Test("Two copies of one release are independent")
     func distinctInstancesOfSameRelease() async throws {
         let store = try makeStore()

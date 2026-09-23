@@ -37,6 +37,30 @@ struct ImageCacheTests {
         #expect(await cache.statistics().fileCount == 0, "the cleared cache must stay cleared")
     }
 
+    @Test("Removing an image cancels its download in flight, so the old image never lands")
+    func removeCancelsInFlightDownload() async throws {
+        SlowProtocol.reset()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [SlowProtocol.self]
+        let directory = URL.temporaryDirectory.appending(path: UUID().uuidString)
+        let cache = ImageCache(directory: directory, session: URLSession(configuration: configuration))
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let download = Task {
+            try await cache.localURL(
+                releaseID: 7,
+                kind: .cover,
+                remoteURL: URL(string: "https://i.discogs.com/7-old.jpeg")!
+            )
+        }
+        try await Task.sleep(for: .milliseconds(120))
+
+        await cache.remove(ImageCache.Slot(releaseID: 7, kind: .cover))
+
+        _ = try? await download.value
+        #expect(await cache.isCached(releaseID: 7, kind: .cover) == false)
+    }
+
     @Test("The default directory is durable, not the purgeable caches directory")
     func defaultDirectoryIsApplicationSupport() {
         let directory = ImageCache.defaultDirectory()

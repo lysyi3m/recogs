@@ -53,7 +53,9 @@ actor ImageCache {
     private var activeDownloads = 0
     private var waiters: [UUID: CheckedContinuation<Void, any Error>] = [:]
     /// Coalesces concurrent requests for the same file so a cover is fetched once, not once per view.
-    private var inFlight: [URL: Task<URL, any Error>] = [:]
+    /// Keyed by destination; the source URL is kept so a request for a newer image never joins the
+    /// download of an older one.
+    private var inFlight: [URL: (source: URL, task: Task<URL, any Error>)] = [:]
 
     init(
         directory: URL? = nil,
@@ -126,8 +128,13 @@ actor ImageCache {
     }
 
     /// Deletes one release's cached art, so the next request downloads what Discogs serves now.
+    ///
+    /// A download still in flight is cancelled too. Otherwise it would write the old image back
+    /// after the removal, and it would stay cached until the URL changed again.
     func remove(releaseID: Int, kind: Kind) {
-        try? FileManager.default.removeItem(at: fileURL(releaseID: releaseID, kind: kind))
+        let destination = fileURL(releaseID: releaseID, kind: kind)
+        inFlight.removeValue(forKey: destination)?.task.cancel()
+        try? FileManager.default.removeItem(at: destination)
     }
 
     func remove(_ slot: Slot) {
@@ -147,15 +154,21 @@ actor ImageCache {
         let destination = fileURL(releaseID: releaseID, kind: kind)
         if FileManager.default.fileExists(atPath: destination.path) { return destination }
 
-        if let existing = inFlight[destination] { return try await existing.value }
+        if let existing = inFlight[destination] {
+            if existing.source == remoteURL { return try await existing.task.value }
+            // A different URL for the same file: usually Discogs changed the image while the old
+            // one was downloading, occasionally another screen asking for a resized variant. The
+            // newer request wins; the older download must not land.
+            existing.task.cancel()
+        }
 
         let task = Task<URL, any Error> {
             try await withConcurrencyLimit {
                 try await download(remoteURL, to: destination)
             }
         }
-        inFlight[destination] = task
-        defer { inFlight[destination] = nil }
+        inFlight[destination] = (remoteURL, task)
+        defer { if inFlight[destination]?.task == task { inFlight[destination] = nil } }
         return try await task.value
     }
 
@@ -228,6 +241,8 @@ actor ImageCache {
         // that the cache would then treat as complete and keep.
         let temporary = destination.deletingLastPathComponent()
             .appending(path: UUID().uuidString, directoryHint: .notDirectory)
+        // A download superseded while in flight must not write the old image over the new one.
+        try Task.checkCancellation()
         try data.write(to: temporary, options: .atomic)
         do {
             if FileManager.default.fileExists(atPath: destination.path) {
@@ -313,7 +328,7 @@ actor ImageCache {
     /// another caller may still be waiting on it. Clearing the cache or signing out has to stop
     /// them explicitly, or files reappear in a directory that was just emptied.
     func cancelInFlightDownloads() async {
-        let tasks = Array(inFlight.values)
+        let tasks = inFlight.values.map(\.task)
         inFlight.removeAll()
         for task in tasks { task.cancel() }
         for waiter in waiters.values { waiter.resume(throwing: CancellationError()) }

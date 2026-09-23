@@ -127,12 +127,15 @@ final class CachedCollectionItem {
     /// The cached art a fresh snapshot makes stale: each slot whose Discogs URL has changed.
     ///
     /// Compares a field with the same field, so a resized variant of the same image never counts.
+    /// A URL that appears where there was none counts too: the slot may hold a fallback — the
+    /// record page caches the release's own image in the cover slot of a copy with no cover.
     func changedArtwork(comparedTo item: CollectionItem) -> [ImageCache.Slot] {
+        func normalized(_ url: String?) -> String? { url?.isEmpty == false ? url : nil }
         var slots: [ImageCache.Slot] = []
-        if let old = coverURL, !old.isEmpty, old != item.basicInformation.coverImage {
+        if normalized(coverURL) != normalized(item.basicInformation.coverImage) {
             slots.append(ImageCache.Slot(releaseID: releaseID, kind: .cover))
         }
-        if let old = thumbURL, !old.isEmpty, old != item.basicInformation.thumb {
+        if normalized(thumbURL) != normalized(item.basicInformation.thumb) {
             slots.append(ImageCache.Slot(releaseID: releaseID, kind: .thumb))
         }
         return slots

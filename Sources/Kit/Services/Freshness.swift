@@ -9,6 +9,10 @@ import Foundation
 enum Freshness {
     static let maximumAge: TimeInterval = 6 * 60 * 60
 
+    /// How long to wait before trying again after a refresh that failed, usually because Discogs
+    /// was unreachable.
+    static let retryInterval: TimeInterval = 15 * 60
+
     static func isFresh(_ date: Date?, now: Date = .now) -> Bool {
         guard let date else { return false }
         return now.timeIntervalSince(date) < maximumAge

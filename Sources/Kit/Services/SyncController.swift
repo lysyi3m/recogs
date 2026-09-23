@@ -40,13 +40,11 @@ final class SyncController {
         return Date().timeIntervalSince(lastSyncedAt) > 300
     }
 
-    /// How long to wait before trying again after a sync that did not bring the cache up to date.
-    private static let retryInterval: TimeInterval = 15 * 60
-
     /// Keeps the collection inside `Freshness.maximumAge` for as long as the caller runs.
     ///
-    /// Sleeps until the last sync falls due, syncs, and retries every 15 minutes while that fails —
-    /// offline, the cache stays on screen with its age, and catches up once Discogs is reachable.
+    /// Sleeps until the last sync falls due, syncs, and retries every `Freshness.retryInterval`
+    /// while that fails. Offline, the cache stays on screen with its age, and catches up once
+    /// Discogs is reachable.
     /// The sleep runs on the continuous clock, so a device that slept through the deadline syncs
     /// as soon as it wakes.
     func keepFresh() async {
@@ -58,7 +56,7 @@ final class SyncController {
                     await sync()
                 }
                 if !Freshness.isFresh(lastSyncedAt) {
-                    try await Task.sleep(for: .seconds(Self.retryInterval))
+                    try await Task.sleep(for: .seconds(Freshness.retryInterval))
                 }
             } catch {
                 return

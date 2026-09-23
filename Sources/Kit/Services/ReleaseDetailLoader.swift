@@ -25,18 +25,25 @@ final class ReleaseDetailLoader {
     }
 
     private let services: AppServices
+    /// The clock freshness is judged by. Injectable so tests can age a copy without waiting.
+    private let now: () -> Date
 
-    init(services: AppServices) {
+    init(services: AppServices, now: @escaping () -> Date = Date.init) {
         self.services = services
+        self.now = now
     }
 
+    /// Shows the release, fetching it when there is no copy or the copy is past
+    /// `Freshness.maximumAge`. A stale page stays on screen while it refreshes.
     func load(releaseID: Int) async {
-        if case .loaded = state { return }
-        state = .loading
-        var cached: ReleaseDetailSnapshot?
+        if let snapshot, Freshness.isFresh(snapshot.fetchedAt, now: now()) { return }
+        if snapshot == nil { state = .loading }
+        var cached = snapshot
         do {
-            cached = try await services.store.releaseDetail(releaseID: releaseID)
-            if let cached, Freshness.isFresh(cached.fetchedAt) {
+            if let stored = try await services.store.releaseDetail(releaseID: releaseID) {
+                cached = stored
+            }
+            if let cached, Freshness.isFresh(cached.fetchedAt, now: now()) {
                 state = .loaded(cached)
                 return
             }
@@ -57,6 +64,21 @@ final class ReleaseDetailLoader {
             // The detail was dismissed before the fetch finished.
         } catch {
             state = cached.map(State.loaded) ?? .failed(error.localizedDescription)
+        }
+    }
+
+    /// Keeps an open page inside `Freshness.maximumAge`: reloads when the shown copy falls due,
+    /// and retries every `Freshness.retryInterval` while that fails.
+    func keepFresh(releaseID: Int) async {
+        while !Task.isCancelled {
+            let due = snapshot.map { $0.fetchedAt.addingTimeInterval(Freshness.maximumAge) }
+            let wait = due.map { $0.timeIntervalSinceNow } ?? 0
+            do {
+                try await Task.sleep(for: .seconds(wait > 0 ? wait : Freshness.retryInterval))
+            } catch {
+                return
+            }
+            await load(releaseID: releaseID)
         }
     }
 }

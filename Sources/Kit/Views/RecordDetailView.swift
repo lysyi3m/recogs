@@ -49,6 +49,8 @@ struct RecordDetailView: View {
             self.loader = loader
             // Tracklist, notes and country arrive together; one fetch covers the page.
             await loader.load(releaseID: item.releaseID)
+            // A page left open refreshes itself once its data passes six hours old.
+            await loader.keepFresh(releaseID: item.releaseID)
         }
         // An alert rather than a confirmation dialog: raised from the toolbar menu, a dialog is
         // presented as a popover anchored to that menu and inherits its width, which crams the
