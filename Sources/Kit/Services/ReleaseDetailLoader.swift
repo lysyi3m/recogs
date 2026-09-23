@@ -71,8 +71,7 @@ final class ReleaseDetailLoader {
     /// and retries every `Freshness.retryInterval` while that fails.
     func keepFresh(releaseID: Int) async {
         while !Task.isCancelled {
-            let due = snapshot.map { $0.fetchedAt.addingTimeInterval(Freshness.maximumAge) }
-            let wait = due.map { $0.timeIntervalSinceNow } ?? 0
+            let wait = Freshness.timeUntilStale(snapshot?.fetchedAt, now: now())
             do {
                 try await Task.sleep(for: .seconds(wait > 0 ? wait : Freshness.retryInterval))
             } catch {

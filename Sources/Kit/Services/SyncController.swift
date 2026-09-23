@@ -49,9 +49,8 @@ final class SyncController {
     /// as soon as it wakes.
     func keepFresh() async {
         while !Task.isCancelled {
-            let due = lastSyncedAt?.addingTimeInterval(Freshness.maximumAge) ?? .now
             do {
-                try await Task.sleep(for: .seconds(max(due.timeIntervalSinceNow, 0)))
+                try await Task.sleep(for: .seconds(Freshness.timeUntilStale(lastSyncedAt)))
                 if services.hasToken, !Freshness.isFresh(lastSyncedAt), !isSyncing {
                     await sync()
                 }
