@@ -210,21 +210,50 @@ struct ImageCacheTests {
         #expect(await cache.isCached(releaseID: 2, kind: .cover, source: new))
     }
 
-    @Test("A file cached before sources were recorded is kept and stamped, not downloaded again")
-    func legacyFileIsAdopted() async throws {
+    @Test("A file with no recorded source is downloaded again, since nothing shows which image it is")
+    func unrecordedFileIsFetchedAgain() async throws {
         CountingProtocol.reset()
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
 
         let cache = makeCache(directory: directory)
-        let file = await cache.fileURL(releaseID: 3, kind: .cover)
-        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try CountingProtocol.pngBytes.write(to: file)
+        let file = try await writeUnrecordedFile(in: cache, releaseID: 3, contents: CountingProtocol.pngBytes)
         let remote = URL(string: "https://i.discogs.com/3-cover.jpeg")!
+        #expect(await cache.isCached(releaseID: 3, kind: .cover, source: remote) == false)
 
+        // Cached before files recorded their source: Discogs may have changed the cover since, so
+        // stamping it with today's URL could vouch for the wrong image forever.
         _ = try await cache.localURL(releaseID: 3, kind: .cover, remoteURL: remote)
-        #expect(CountingProtocol.count(for: remote.absoluteString) == 0, "an upgrade must not re-download every cover")
+        #expect(CountingProtocol.count(for: remote.absoluteString) == 1)
         #expect(ImageCache.recordedSource(of: file) == remote.absoluteString)
+    }
+
+    @Test("When a new download fails, the file already on disk is still served")
+    func unverifiedFileIsServedWhenDownloadFails() async throws {
+        CountingProtocol.serve(body: Data("<html>unavailable</html>".utf8))
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let cache = makeCache(directory: directory)
+        let old = Data("old cover".utf8)
+        let file = try await writeUnrecordedFile(in: cache, releaseID: 4, contents: old)
+
+        let served = try await cache.localURL(
+            releaseID: 4,
+            kind: .cover,
+            remoteURL: URL(string: "https://i.discogs.com/4-cover.jpeg")!
+        )
+        #expect(served == file)
+        #expect(try Data(contentsOf: file) == old, "offline, the collection stays browsable")
+        #expect(ImageCache.recordedSource(of: file) == nil, "and the file is still not vouched for")
+    }
+
+    /// A cover as an older build left it: in its slot, with no recorded source.
+    private func writeUnrecordedFile(in cache: ImageCache, releaseID: Int, contents: Data) async throws -> URL {
+        let file = await cache.fileURL(releaseID: releaseID, kind: .cover)
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try contents.write(to: file)
+        return file
     }
 
     @Test("Concurrent requests for one image collapse into a single download")
@@ -316,13 +345,15 @@ struct ImageCacheTests {
         let cache = makeCache(directory: directory)
         let remote = URL(string: "https://i.discogs.com/corrupt.jpeg")!
 
-        // Simulate a file cached by an earlier build that did not validate its downloads.
+        // Simulate a file that went bad on disk after it was cached, with its source recorded, so
+        // the cache would otherwise serve it for as long as the URL stands.
         let destination = await cache.fileURL(releaseID: 14, kind: .thumb)
         try FileManager.default.createDirectory(
             at: destination.deletingLastPathComponent(), withIntermediateDirectories: true
         )
         try Data("garbage".utf8).write(to: destination)
-        #expect(await cache.isCached(releaseID: 14, kind: .thumb))
+        ImageCache.recordSource(remote, on: destination)
+        #expect(await cache.isCached(releaseID: 14, kind: .thumb, source: remote))
 
         await #expect(throws: (any Error).self) {
             try await cache.image(releaseID: 14, kind: .thumb, remoteURL: remote, maximumPixelSize: 150)

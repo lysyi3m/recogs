@@ -15,7 +15,9 @@ typealias PlatformImage = NSImage
 /// Thumbs and full-resolution covers are stored separately so the grid can be usable long before
 /// any full-res image is fetched. Each file records the URL it was downloaded from, and a request
 /// for a different URL downloads again — so the art follows Discogs, and an app that quits halfway
-/// through a sync cannot strand an old image. There is no size-based eviction.
+/// through a sync cannot strand an old image. A file with no recorded source, cached before files
+/// recorded one, is downloaded again once. Until a download succeeds the file on disk is still
+/// served, so the collection stays browsable offline. There is no size-based eviction.
 ///
 /// Image requests do not pass through `RateLimiter`. Measured against the live API, `i.discogs.com`
 /// returns no `X-Discogs-Ratelimit*` headers and does not move the counter, so the CDN has its own
@@ -76,8 +78,9 @@ actor ImageCache {
         return base.appending(path: "Recogs/Images", directoryHint: .isDirectory)
     }
 
-    /// Moves art left behind in the old Caches location, so an upgrade does not silently re-download
-    /// every cover. Runs once: the old directory is gone afterwards.
+    /// Moves art left behind in the old Caches location, so an upgrade still has covers to show
+    /// offline. The moved files carry no recorded source, so each is downloaded again on first use
+    /// online. Runs once: the old directory is gone afterwards.
     static func migrateFromCachesDirectory(into directory: URL) {
         let manager = FileManager.default
         guard let caches = manager.urls(for: .cachesDirectory, in: .userDomainMask).first else { return }
@@ -121,12 +124,12 @@ actor ImageCache {
         FileManager.default.fileExists(atPath: fileURL(releaseID: releaseID, kind: kind).path)
     }
 
-    /// Whether the slot holds the image `source` points at.
+    /// Whether the slot holds the image `source` points at. A file with no recorded source does
+    /// not count: nothing shows which image it is.
     func isCached(releaseID: Int, kind: Kind, source: URL) -> Bool {
         let file = fileURL(releaseID: releaseID, kind: kind)
         guard FileManager.default.fileExists(atPath: file.path) else { return false }
-        let recorded = Self.recordedSource(of: file)
-        return recorded == nil || recorded == source.absoluteString
+        return Self.recordedSource(of: file) == source.absoluteString
     }
 
     /// Returns the local file for a release's art, downloading it when the slot is empty or holds
@@ -135,24 +138,28 @@ actor ImageCache {
     /// Keyed by release and kind, one file per slot. Discogs serves the same artwork under several
     /// resized URLs, so every caller asks for a slot with the same URL — the grid and the record
     /// page agree on `cover_image` (see `RecordDetailView.coverSource`). A different URL therefore
-    /// means Discogs changed the image, and the file is downloaded again.
+    /// means Discogs changed the image, and the file is downloaded again. If that download fails,
+    /// the file already on disk is returned.
     @discardableResult
     func localURL(releaseID: Int, kind: Kind, remoteURL: URL) async throws -> URL {
         let destination = fileURL(releaseID: releaseID, kind: kind)
-        if FileManager.default.fileExists(atPath: destination.path) {
-            switch Self.recordedSource(of: destination) {
-            case remoteURL.absoluteString?:
-                return destination
-            case nil:
-                // Cached before files recorded their source. Kept and stamped rather than every
-                // cover downloading again after an upgrade.
-                Self.recordSource(remoteURL, on: destination)
-                return destination
-            default:
-                break
-            }
-        }
+        let hasFile = FileManager.default.fileExists(atPath: destination.path)
+        if hasFile, Self.recordedSource(of: destination) == remoteURL.absoluteString { return destination }
 
+        do {
+            return try await fetch(remoteURL, to: destination)
+        } catch {
+            // The file on disk is from another URL, or from before files recorded their source, so
+            // nothing vouches for it. It is still what the user saw last: offline, it stays on
+            // screen until Discogs is reachable, like the rest of the cache.
+            guard hasFile, FileManager.default.fileExists(atPath: destination.path) else { throw error }
+            return destination
+        }
+    }
+
+    /// Downloads `remoteURL` into `destination`, sharing a download already in flight for the same
+    /// source.
+    private func fetch(_ remoteURL: URL, to destination: URL) async throws -> URL {
         if let existing = inFlight[destination] {
             if existing.source == remoteURL { return try await existing.task.value }
             // Discogs changed the image while the old one was downloading. The newer request wins;
