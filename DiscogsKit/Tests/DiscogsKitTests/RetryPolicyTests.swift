@@ -89,6 +89,19 @@ struct RetryPolicyTests {
         #expect(CountingProtocol.count(forMethod: "DELETE") == 3)
     }
 
+    @Test("A rejected token reads as one short line, not Discogs' developer-facing text")
+    func rejectedTokenMessage() async throws {
+        CountingProtocol.configure(
+            status: 401,
+            body: Data(#"{"message": "Invalid consumer token. Please register an app before making requests."}"#.utf8)
+        )
+        let client = makeClient()
+
+        let error = await #expect(throws: DiscogsError.self) { try await client.identity() }
+        #expect(error?.isUnauthorized == true)
+        #expect(error?.errorDescription == "Discogs rejected the token.")
+    }
+
     @Test("A successful add is sent once and returns its instance id")
     func successfulAdd() async throws {
         CountingProtocol.configure(status: 201, body: Data(#"{"instance_id": 99}"#.utf8))

@@ -42,6 +42,14 @@ struct ErrorClassificationTests {
         #expect(message == "No connection to Discogs.")
     }
 
+    @Test("An unauthorized error shows the app's own message, or a plain rejection without one")
+    func unauthorizedMessage() throws {
+        let local = DiscogsError.unauthorized(message: "No Discogs token.")
+        #expect(try #require(local.errorDescription) == "No Discogs token.")
+        let rejected = DiscogsError.unauthorized(message: nil)
+        #expect(try #require(rejected.errorDescription) == "Discogs rejected the token.")
+    }
+
     @Test("A rate-limit message names the wait")
     func rateLimitMessage() throws {
         let message = try #require(DiscogsError.rateLimited(retryAfter: 30).errorDescription)

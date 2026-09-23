@@ -294,7 +294,10 @@ public struct DiscogsClient: Sendable {
                 attempt += 1
 
             case 401, 403:
-                throw DiscogsError.unauthorized(message: message(from: data))
+                // Discogs' text here ("Invalid consumer token. Please register an app before
+                // making requests.") speaks to API developers, not to the person holding the
+                // token, so the error carries no message and reads as a plain rejection.
+                throw DiscogsError.unauthorized(message: nil)
 
             case 404:
                 throw DiscogsError.notFound(message: message(from: data))
