@@ -37,30 +37,6 @@ struct ImageCacheTests {
         #expect(await cache.statistics().fileCount == 0, "the cleared cache must stay cleared")
     }
 
-    @Test("Removing an image cancels its download in flight, so the old image never lands")
-    func removeCancelsInFlightDownload() async throws {
-        SlowProtocol.reset()
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [SlowProtocol.self]
-        let directory = URL.temporaryDirectory.appending(path: UUID().uuidString)
-        let cache = ImageCache(directory: directory, session: URLSession(configuration: configuration))
-        defer { try? FileManager.default.removeItem(at: directory) }
-
-        let download = Task {
-            try await cache.localURL(
-                releaseID: 7,
-                kind: .cover,
-                remoteURL: URL(string: "https://i.discogs.com/7-old.jpeg")!
-            )
-        }
-        try await Task.sleep(for: .milliseconds(120))
-
-        await cache.remove(ImageCache.Slot(releaseID: 7, kind: .cover))
-
-        _ = try? await download.value
-        #expect(await cache.isCached(releaseID: 7, kind: .cover) == false)
-    }
-
     @Test("The default directory is durable, not the purgeable caches directory")
     func defaultDirectoryIsApplicationSupport() {
         let directory = ImageCache.defaultDirectory()
@@ -213,8 +189,8 @@ struct ImageCacheTests {
         #expect(await cache.isCached(releaseID: 1, kind: .cover))
     }
 
-    @Test("A removed image is downloaded again from its new URL, leaving the other kind alone")
-    func removedImageIsFetchedAgain() async throws {
+    @Test("An image requested from a new URL is downloaded again; the same URL is served from disk")
+    func newSourceIsFetchedAgain() async throws {
         CountingProtocol.reset()
         let directory = temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -222,16 +198,33 @@ struct ImageCacheTests {
         let cache = makeCache(directory: directory)
         let old = URL(string: "https://i.discogs.com/2-old.jpeg")!
         let new = URL(string: "https://i.discogs.com/2-new.jpeg")!
-        let thumb = URL(string: "https://i.discogs.com/2-thumb.jpeg")!
         _ = try await cache.localURL(releaseID: 2, kind: .cover, remoteURL: old)
-        _ = try await cache.localURL(releaseID: 2, kind: .thumb, remoteURL: thumb)
+        #expect(await cache.isCached(releaseID: 2, kind: .cover, source: old))
+        #expect(await cache.isCached(releaseID: 2, kind: .cover, source: new) == false)
 
-        await cache.remove(ImageCache.Slot(releaseID: 2, kind: .cover))
-        #expect(await cache.isCached(releaseID: 2, kind: .cover) == false)
-        #expect(await cache.isCached(releaseID: 2, kind: .thumb))
-
+        // Nothing was removed first: the recorded source alone tells the file is out of date, so
+        // an app that quit between saving the new URL and dropping the old file still recovers.
+        _ = try await cache.localURL(releaseID: 2, kind: .cover, remoteURL: new)
         _ = try await cache.localURL(releaseID: 2, kind: .cover, remoteURL: new)
         #expect(CountingProtocol.count(for: new.absoluteString) == 1)
+        #expect(await cache.isCached(releaseID: 2, kind: .cover, source: new))
+    }
+
+    @Test("A file cached before sources were recorded is kept and stamped, not downloaded again")
+    func legacyFileIsAdopted() async throws {
+        CountingProtocol.reset()
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let cache = makeCache(directory: directory)
+        let file = await cache.fileURL(releaseID: 3, kind: .cover)
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try CountingProtocol.pngBytes.write(to: file)
+        let remote = URL(string: "https://i.discogs.com/3-cover.jpeg")!
+
+        _ = try await cache.localURL(releaseID: 3, kind: .cover, remoteURL: remote)
+        #expect(CountingProtocol.count(for: remote.absoluteString) == 0, "an upgrade must not re-download every cover")
+        #expect(ImageCache.recordedSource(of: file) == remote.absoluteString)
     }
 
     @Test("Concurrent requests for one image collapse into a single download")

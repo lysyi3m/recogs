@@ -24,6 +24,14 @@ final class ReleaseDetailLoader {
         return nil
     }
 
+    /// When the shown copy was fetched, if it is past `Freshness.maximumAge` — a refresh failed and
+    /// the cached copy is standing in. The page shows this age itself: the collection's sync time
+    /// says nothing about how old this release's details are.
+    var staleSince: Date? {
+        guard let snapshot, !Freshness.isFresh(snapshot.fetchedAt, now: now()) else { return nil }
+        return snapshot.fetchedAt
+    }
+
     private let services: AppServices
     /// The clock freshness is judged by. Injectable so tests can age a copy without waiting.
     private let now: () -> Date
@@ -52,14 +60,7 @@ final class ReleaseDetailLoader {
                 return
             }
             let release = try await client.release(id: releaseID)
-            let fresh = try await services.store.upsertReleaseDetail(release)
-            // The record page falls back to this image when the copy has no collection cover, so
-            // the cover slot may hold the old one. When the copy does have a collection cover,
-            // dropping the slot costs one download of that cover again.
-            if let old = cached?.coverURL, old != fresh.coverURL {
-                await services.imageCache.remove(releaseID: releaseID, kind: .cover)
-            }
-            state = .loaded(fresh)
+            state = .loaded(try await services.store.upsertReleaseDetail(release))
         } catch is CancellationError {
             // The detail was dismissed before the fetch finished.
         } catch {

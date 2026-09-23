@@ -32,6 +32,14 @@ struct RecordDetailView: View {
                 facts
                 tracklist
                 notes
+                if let staleSince = loader?.staleSince {
+                    Label(
+                        "Details updated \(staleSince.formatted(.relative(presentation: .named)))",
+                        systemImage: "clock.arrow.circlepath"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
                 if let discogsURL { DiscogsCredit(destination: discogsURL) }
             }
             .frame(maxWidth: 780, alignment: .leading)

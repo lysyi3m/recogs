@@ -13,9 +13,9 @@ typealias PlatformImage = NSImage
 /// On-disk cache for cover art, keyed by release id.
 ///
 /// Thumbs and full-resolution covers are stored separately so the grid can be usable long before
-/// any full-res image is fetched. A file stays until Discogs reports a different image URL for its
-/// release — the sync then removes it, so the art never lags Discogs by more than one sync — or
-/// until the cache is reset. There is no size-based eviction.
+/// any full-res image is fetched. Each file records the URL it was downloaded from, and a request
+/// for a different URL downloads again — so the art follows Discogs, and an app that quits halfway
+/// through a sync cannot strand an old image. There is no size-based eviction.
 ///
 /// Image requests do not pass through `RateLimiter`. Measured against the live API, `i.discogs.com`
 /// returns no `X-Discogs-Ratelimit*` headers and does not move the counter, so the CDN has its own
@@ -26,12 +26,6 @@ actor ImageCache {
         case thumb
         /// ~500px+, fetched lazily when a record detail opens.
         case cover
-    }
-
-    /// One cached file: a release's art of one kind.
-    struct Slot: Hashable, Sendable {
-        let releaseID: Int
-        let kind: Kind
     }
 
     enum CacheError: Error, LocalizedError {
@@ -127,38 +121,42 @@ actor ImageCache {
         FileManager.default.fileExists(atPath: fileURL(releaseID: releaseID, kind: kind).path)
     }
 
-    /// Deletes one release's cached art, so the next request downloads what Discogs serves now.
-    ///
-    /// A download still in flight is cancelled too. Otherwise it would write the old image back
-    /// after the removal, and it would stay cached until the URL changed again.
-    func remove(releaseID: Int, kind: Kind) {
-        let destination = fileURL(releaseID: releaseID, kind: kind)
-        inFlight.removeValue(forKey: destination)?.task.cancel()
-        try? FileManager.default.removeItem(at: destination)
+    /// Whether the slot holds the image `source` points at.
+    func isCached(releaseID: Int, kind: Kind, source: URL) -> Bool {
+        let file = fileURL(releaseID: releaseID, kind: kind)
+        guard FileManager.default.fileExists(atPath: file.path) else { return false }
+        let recorded = Self.recordedSource(of: file)
+        return recorded == nil || recorded == source.absoluteString
     }
 
-    func remove(_ slot: Slot) {
-        remove(releaseID: slot.releaseID, kind: slot.kind)
-    }
-
-    /// Returns the local file for a release's art, downloading it once if it is not cached yet.
+    /// Returns the local file for a release's art, downloading it when the slot is empty or holds
+    /// an image from a different URL.
     ///
-    /// Keyed by release and kind, deliberately not by URL. Discogs serves the same artwork under
-    /// several resized URLs — `basic_information.cover_image` is a 600px fit, the release's own
-    /// primary image a smaller one — all derived from one source file. Re-fetching because the URL
-    /// changed would spend a request to replace an image with the same picture, sometimes smaller.
-    /// The sync drops a file only when the same field comes back with a different URL, which means
-    /// Discogs changed the image rather than its size.
+    /// Keyed by release and kind, one file per slot. Discogs serves the same artwork under several
+    /// resized URLs, so every caller asks for a slot with the same URL — the grid and the record
+    /// page agree on `cover_image` (see `RecordDetailView.coverSource`). A different URL therefore
+    /// means Discogs changed the image, and the file is downloaded again.
     @discardableResult
     func localURL(releaseID: Int, kind: Kind, remoteURL: URL) async throws -> URL {
         let destination = fileURL(releaseID: releaseID, kind: kind)
-        if FileManager.default.fileExists(atPath: destination.path) { return destination }
+        if FileManager.default.fileExists(atPath: destination.path) {
+            switch Self.recordedSource(of: destination) {
+            case remoteURL.absoluteString?:
+                return destination
+            case nil:
+                // Cached before files recorded their source. Kept and stamped rather than every
+                // cover downloading again after an upgrade.
+                Self.recordSource(remoteURL, on: destination)
+                return destination
+            default:
+                break
+            }
+        }
 
         if let existing = inFlight[destination] {
             if existing.source == remoteURL { return try await existing.task.value }
-            // A different URL for the same file: usually Discogs changed the image while the old
-            // one was downloading, occasionally another screen asking for a resized variant. The
-            // newer request wins; the older download must not land.
+            // Discogs changed the image while the old one was downloading. The newer request wins;
+            // the older download must not land.
             existing.task.cancel()
         }
 
@@ -244,6 +242,8 @@ actor ImageCache {
         // A download superseded while in flight must not write the old image over the new one.
         try Task.checkCancellation()
         try data.write(to: temporary, options: .atomic)
+        // Stamped before the move, so the file never exists without its source.
+        Self.recordSource(remoteURL, on: temporary)
         do {
             if FileManager.default.fileExists(atPath: destination.path) {
                 _ = try FileManager.default.replaceItemAt(destination, withItemAt: temporary)
@@ -334,6 +334,25 @@ actor ImageCache {
         for waiter in waiters.values { waiter.resume(throwing: CancellationError()) }
         waiters.removeAll()
         for task in tasks { _ = try? await task.value }
+    }
+
+    // MARK: - Recorded source
+
+    /// An extended attribute on each file, holding the URL it was downloaded from. It travels with
+    /// the file through the atomic move, so the image and its source can never disagree.
+    private static let sourceAttribute = "com.mlkshkvch.recogs.source"
+
+    nonisolated static func recordedSource(of file: URL) -> String? {
+        let length = getxattr(file.path, sourceAttribute, nil, 0, 0, 0)
+        guard length > 0 else { return nil }
+        var buffer = [UInt8](repeating: 0, count: length)
+        guard getxattr(file.path, sourceAttribute, &buffer, length, 0, 0) == length else { return nil }
+        return String(decoding: buffer, as: UTF8.self)
+    }
+
+    nonisolated static func recordSource(_ source: URL, on file: URL) {
+        let bytes = Array(source.absoluteString.utf8)
+        _ = setxattr(file.path, sourceAttribute, bytes, bytes.count, 0, 0)
     }
 
     // MARK: - Decoding

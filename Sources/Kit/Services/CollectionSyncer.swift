@@ -73,11 +73,7 @@ actor CollectionSyncer {
 
         for try await page in client.collectionPages(user: identity.username) {
             try Task.checkCancellation()
-            // Art whose URL changed is dropped here and downloaded again by the warmer below, so
-            // covers follow Discogs on the same schedule as the rest of the collection.
-            for slot in try await store.upsert(page.releases) {
-                await imageCache.remove(slot)
-            }
+            try await store.upsert(page.releases)
 
             for item in page.releases {
                 seenInstanceIDs.insert(item.instanceID)
@@ -132,7 +128,13 @@ actor CollectionSyncer {
         await withTaskGroup(of: Bool.self) { group in
             for target in targets {
                 group.addTask { [imageCache] in
-                    if await imageCache.isCached(releaseID: target.releaseID, kind: target.kind) {
+                    // Checked against the source, so art whose URL changed is downloaded again and
+                    // covers follow Discogs on the same schedule as the rest of the collection.
+                    if await imageCache.isCached(
+                        releaseID: target.releaseID,
+                        kind: target.kind,
+                        source: target.url
+                    ) {
                         return false
                     }
                     do {

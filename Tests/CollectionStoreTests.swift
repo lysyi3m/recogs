@@ -16,10 +16,8 @@ struct CollectionStoreTests {
         title: String = "Remain In Light",
         artist: String = "Talking Heads",
         year: Int? = 1980,
-        dateAdded: String = "2019-05-06T18:32:50-07:00",
-        cover: String? = nil
+        dateAdded: String = "2019-05-06T18:32:50-07:00"
     ) throws -> CollectionItem {
-        let cover = cover ?? "https://i.discogs.com/\(releaseID)-cover.jpeg"
         let yearJSON = year.map(String.init) ?? "0"
         let json = """
         {
@@ -33,7 +31,7 @@ struct CollectionStoreTests {
             "title": "\(title)",
             "year": \(yearJSON),
             "thumb": "https://i.discogs.com/\(releaseID)-thumb.jpeg",
-            "cover_image": "\(cover)",
+            "cover_image": "https://i.discogs.com/\(releaseID)-cover.jpeg",
             "artists": [{ "name": "\(artist)", "join": "" }],
             "labels": [{ "name": "Sire", "catno": "SRK 6095" }],
             "formats": [{ "name": "Vinyl", "qty": "1", "descriptions": ["LP"] }],
@@ -90,27 +88,6 @@ struct CollectionStoreTests {
         #expect(try await store.itemCount() == 1, "the same instance must not be duplicated")
         let cached = try #require(try await store.item(instanceID: 1))
         #expect(cached.title == "New Title", "Discogs wins on conflict")
-    }
-
-    @Test("Upsert reports a cover whose URL changed, and nothing when it did not")
-    func upsertReportsChangedArtwork() async throws {
-        let store = try makeStore()
-        try await store.upsert([makeItem(instanceID: 1, cover: "https://i.discogs.com/old.jpeg")])
-
-        let unchanged = try await store.upsert([makeItem(instanceID: 1, cover: "https://i.discogs.com/old.jpeg")])
-        #expect(unchanged.isEmpty)
-
-        let changed = try await store.upsert([makeItem(instanceID: 1, cover: "https://i.discogs.com/new.jpeg")])
-        #expect(changed == [ImageCache.Slot(releaseID: 100, kind: .cover)])
-    }
-
-    @Test("A cover appearing where there was none is reported, because the slot may hold a fallback")
-    func upsertReportsNewlyAppearingCover() async throws {
-        let store = try makeStore()
-        try await store.upsert([makeItem(instanceID: 1, cover: "")])
-
-        let appeared = try await store.upsert([makeItem(instanceID: 1, cover: "https://i.discogs.com/first.jpeg")])
-        #expect(appeared == [ImageCache.Slot(releaseID: 100, kind: .cover)])
     }
 
     @Test("Two copies of one release are independent")

@@ -51,6 +51,7 @@ struct ReleaseDetailTests {
 
         await loader.load(releaseID: 1373891)
         #expect(loader.snapshot?.title == "First", "offline, a stale copy is still shown")
+        #expect(loader.staleSince != nil, "and the page discloses its own age")
 
         try await services.store.upsertReleaseDetail(makeRelease(title: "Second"))
         await loader.load(releaseID: 1373891)
