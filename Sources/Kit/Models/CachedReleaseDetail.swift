@@ -41,7 +41,7 @@ final class CachedReleaseDetail {
     var tracks: [CachedTrack]
     var coverURL: String?
     var discogsURL: String?
-    /// When this record was fetched. Kept so a future refresh policy has something to work with.
+    /// When this record was fetched. A record older than `Freshness.maximumAge` is fetched again.
     var fetchedAt: Date
 
     init(from release: Release) {
@@ -98,6 +98,7 @@ struct ReleaseDetailSnapshot: Sendable, Hashable, Identifiable {
     var tracks: [CachedTrack]
     var coverURL: String?
     var discogsURL: String?
+    var fetchedAt: Date
 
     var id: Int { releaseID }
 
@@ -153,7 +154,8 @@ extension CachedReleaseDetail {
             styles: styles,
             tracks: tracks,
             coverURL: coverURL,
-            discogsURL: discogsURL
+            discogsURL: discogsURL,
+            fetchedAt: fetchedAt
         )
     }
 }

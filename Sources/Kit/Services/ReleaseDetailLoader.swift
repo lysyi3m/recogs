@@ -1,11 +1,13 @@
 import DiscogsKit
 import Foundation
 
-/// Loads a release detail cache-first, fetching from Discogs only on a miss.
+/// Loads a release detail cache-first, fetching from Discogs on a miss or once the cached copy
+/// passes `Freshness.maximumAge`.
 ///
 /// Tracklist, notes and the edition's country all arrive together from `GET /releases/{id}` —
 /// there is no lighter call for any of them — so opening a record fetches once and keeps the
-/// result. A second visit to the same record costs nothing against the rate limit.
+/// result. Another visit within six hours costs nothing against the rate limit. A stale copy that
+/// cannot be refreshed, because Discogs is unreachable, is still shown.
 @MainActor
 @Observable
 final class ReleaseDetailLoader {
@@ -31,21 +33,30 @@ final class ReleaseDetailLoader {
     func load(releaseID: Int) async {
         if case .loaded = state { return }
         state = .loading
+        var cached: ReleaseDetailSnapshot?
         do {
-            if let cached = try await services.store.releaseDetail(releaseID: releaseID) {
+            cached = try await services.store.releaseDetail(releaseID: releaseID)
+            if let cached, Freshness.isFresh(cached.fetchedAt) {
                 state = .loaded(cached)
                 return
             }
             guard let client = services.client else {
-                state = .failed("No Discogs token.")
+                state = cached.map(State.loaded) ?? .failed("No Discogs token.")
                 return
             }
             let release = try await client.release(id: releaseID)
-            state = .loaded(try await services.store.upsertReleaseDetail(release))
+            let fresh = try await services.store.upsertReleaseDetail(release)
+            // The record page falls back to this image when the copy has no collection cover, so
+            // the cover slot may hold the old one. When the copy does have a collection cover,
+            // dropping the slot costs one download of that cover again.
+            if let old = cached?.coverURL, old != fresh.coverURL {
+                await services.imageCache.remove(releaseID: releaseID, kind: .cover)
+            }
+            state = .loaded(fresh)
         } catch is CancellationError {
             // The detail was dismissed before the fetch finished.
         } catch {
-            state = .failed(error.localizedDescription)
+            state = cached.map(State.loaded) ?? .failed(error.localizedDescription)
         }
     }
 }

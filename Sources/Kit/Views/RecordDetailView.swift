@@ -105,12 +105,13 @@ struct RecordDetailView: View {
     /// Which image to show, and which cache slot it belongs in.
     ///
     /// The grid and this page share one cache slot per release, so they have to agree on the URL —
-    /// otherwise whichever opens first decides what is stored, permanently, and the same record
-    /// caches a different image depending on how it was reached. The collection's `cover_image`
-    /// wins; the release's own full-size image is the fallback for a copy that has none.
+    /// otherwise whichever opens first decides what is stored until Discogs changes it, and the
+    /// same record caches a different image depending on how it was reached. The collection's
+    /// `cover_image` wins; the release's own full-size image is the fallback for a copy that has
+    /// none.
     ///
     /// When neither exists the thumb is shown, but as a thumb — writing it into the cover slot
-    /// would cache a 150px image as this release's cover permanently.
+    /// would cache a 150px image as this release's cover for as long as its URL stands.
     private var coverSource: (url: String?, kind: ImageCache.Kind) {
         let collection = item.artwork
         if collection.kind == .cover { return collection }

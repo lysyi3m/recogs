@@ -40,6 +40,32 @@ final class SyncController {
         return Date().timeIntervalSince(lastSyncedAt) > 300
     }
 
+    /// How long to wait before trying again after a sync that did not bring the cache up to date.
+    private static let retryInterval: TimeInterval = 15 * 60
+
+    /// Keeps the collection inside `Freshness.maximumAge` for as long as the caller runs.
+    ///
+    /// Sleeps until the last sync falls due, syncs, and retries every 15 minutes while that fails —
+    /// offline, the cache stays on screen with its age, and catches up once Discogs is reachable.
+    /// The sleep runs on the continuous clock, so a device that slept through the deadline syncs
+    /// as soon as it wakes.
+    func keepFresh() async {
+        while !Task.isCancelled {
+            let due = lastSyncedAt?.addingTimeInterval(Freshness.maximumAge) ?? .now
+            do {
+                try await Task.sleep(for: .seconds(max(due.timeIntervalSinceNow, 0)))
+                if services.hasToken, !Freshness.isFresh(lastSyncedAt), !isSyncing {
+                    await sync()
+                }
+                if !Freshness.isFresh(lastSyncedAt) {
+                    try await Task.sleep(for: .seconds(Self.retryInterval))
+                }
+            } catch {
+                return
+            }
+        }
+    }
+
     /// Runs a full refresh. Concurrent calls are ignored, so pull-to-refresh cannot stack syncs.
     @discardableResult
     func sync() async -> Bool {

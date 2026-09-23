@@ -124,6 +124,20 @@ final class CachedCollectionItem {
         sortTitle = Self.sortKey(title)
     }
 
+    /// The cached art a fresh snapshot makes stale: each slot whose Discogs URL has changed.
+    ///
+    /// Compares a field with the same field, so a resized variant of the same image never counts.
+    func changedArtwork(comparedTo item: CollectionItem) -> [ImageCache.Slot] {
+        var slots: [ImageCache.Slot] = []
+        if let old = coverURL, !old.isEmpty, old != item.basicInformation.coverImage {
+            slots.append(ImageCache.Slot(releaseID: releaseID, kind: .cover))
+        }
+        if let old = thumbURL, !old.isEmpty, old != item.basicInformation.thumb {
+            slots.append(ImageCache.Slot(releaseID: releaseID, kind: .thumb))
+        }
+        return slots
+    }
+
     /// Applies a fresh snapshot in place. Discogs wins on every field.
     func update(from item: CollectionItem) {
         releaseID = item.releaseID
@@ -166,7 +180,7 @@ final class CachedCollectionItem {
     /// about 20 KB, so it is worth using everywhere the art is more than a row icon.
     ///
     /// The kind follows the URL: caching a 150px thumb in the cover slot would fix this release's
-    /// cover as a thumb permanently, and nothing would replace it.
+    /// cover as a thumb for as long as its URL stands, and nothing would replace it.
     var artwork: (url: String?, kind: ImageCache.Kind) {
         if let coverURL, !coverURL.isEmpty { return (coverURL, .cover) }
         return (thumbURL, .thumb)

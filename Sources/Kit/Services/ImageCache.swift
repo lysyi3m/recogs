@@ -10,11 +10,12 @@ import AppKit
 typealias PlatformImage = NSImage
 #endif
 
-/// Permanent on-disk cache for cover art, keyed by release id.
+/// On-disk cache for cover art, keyed by release id.
 ///
 /// Thumbs and full-resolution covers are stored separately so the grid can be usable long before
-/// any full-res image is fetched. Nothing is ever evicted or re-fetched: a release's art does not
-/// change, and re-downloading is the one cost worth avoiding on a metered API.
+/// any full-res image is fetched. A file stays until Discogs reports a different image URL for its
+/// release — the sync then removes it, so the art never lags Discogs by more than one sync — or
+/// until the cache is reset. There is no size-based eviction.
 ///
 /// Image requests do not pass through `RateLimiter`. Measured against the live API, `i.discogs.com`
 /// returns no `X-Discogs-Ratelimit*` headers and does not move the counter, so the CDN has its own
@@ -25,6 +26,12 @@ actor ImageCache {
         case thumb
         /// ~500px+, fetched lazily when a record detail opens.
         case cover
+    }
+
+    /// One cached file: a release's art of one kind.
+    struct Slot: Hashable, Sendable {
+        let releaseID: Int
+        let kind: Kind
     }
 
     enum CacheError: Error, LocalizedError {
@@ -118,12 +125,23 @@ actor ImageCache {
         FileManager.default.fileExists(atPath: fileURL(releaseID: releaseID, kind: kind).path)
     }
 
+    /// Deletes one release's cached art, so the next request downloads what Discogs serves now.
+    func remove(releaseID: Int, kind: Kind) {
+        try? FileManager.default.removeItem(at: fileURL(releaseID: releaseID, kind: kind))
+    }
+
+    func remove(_ slot: Slot) {
+        remove(releaseID: slot.releaseID, kind: slot.kind)
+    }
+
     /// Returns the local file for a release's art, downloading it once if it is not cached yet.
     ///
     /// Keyed by release and kind, deliberately not by URL. Discogs serves the same artwork under
     /// several resized URLs — `basic_information.cover_image` is a 600px fit, the release's own
     /// primary image a smaller one — all derived from one source file. Re-fetching because the URL
     /// changed would spend a request to replace an image with the same picture, sometimes smaller.
+    /// The sync drops a file only when the same field comes back with a different URL, which means
+    /// Discogs changed the image rather than its size.
     @discardableResult
     func localURL(releaseID: Int, kind: Kind, remoteURL: URL) async throws -> URL {
         let destination = fileURL(releaseID: releaseID, kind: kind)
@@ -145,8 +163,8 @@ actor ImageCache {
     func image(releaseID: Int, kind: Kind, remoteURL: URL, maximumPixelSize: CGFloat) async throws -> PlatformImage {
         let url = try await localURL(releaseID: releaseID, kind: kind, remoteURL: remoteURL)
         guard let image = Self.downsample(at: url, maximumPixelSize: maximumPixelSize) else {
-            // An undecodable file is worse than none: it counts as cached forever. Drop it so the
-            // next request downloads again.
+            // An undecodable file is worse than none: it counts as cached until its URL changes.
+            // Drop it so the next request downloads again.
             try? FileManager.default.removeItem(at: url)
             throw CacheError.notAnImage
         }
@@ -197,8 +215,8 @@ actor ImageCache {
             throw CacheError.badResponse(status: http.statusCode)
         }
         // A 200 does not mean an image. CDNs answer with HTML error pages, empty bodies and
-        // truncated responses, and nothing here is ever re-fetched — so anything that is not a
-        // complete image must be rejected before it reaches the cache.
+        // truncated responses, and a cached file is not fetched again while its URL stands — so
+        // anything that is not a complete image must be rejected before it reaches the cache.
         guard Self.isCompleteImage(data) else { throw CacheError.notAnImage }
 
         try FileManager.default.createDirectory(
@@ -207,7 +225,7 @@ actor ImageCache {
         )
         excludeFromBackup()
         // Write via a temporary file so an interrupted download never leaves a truncated image
-        // that the cache would then treat as complete and never re-fetch.
+        // that the cache would then treat as complete and keep.
         let temporary = destination.deletingLastPathComponent()
             .appending(path: UUID().uuidString, directoryHint: .notDirectory)
         try data.write(to: temporary, options: .atomic)
@@ -230,8 +248,8 @@ actor ImageCache {
     /// The container checks are cheap early-outs: an HTML body has no image type and an empty one
     /// has no frames. They are not sufficient on their own — a source built from a complete `Data`
     /// reports `statusComplete` even when the pixel data is truncated — so the image is decoded
-    /// once to be sure. That cost is paid on first download only, and never re-fetching makes a
-    /// corrupt file expensive to accept.
+    /// once to be sure. That cost is paid on first download only, and keeping a file until its
+    /// URL changes makes a corrupt file expensive to accept.
     nonisolated static func isCompleteImage(_ data: Data) -> Bool {
         guard !data.isEmpty,
               let source = CGImageSourceCreateWithData(

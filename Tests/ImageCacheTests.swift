@@ -189,6 +189,27 @@ struct ImageCacheTests {
         #expect(await cache.isCached(releaseID: 1, kind: .cover))
     }
 
+    @Test("A removed image is downloaded again from its new URL, leaving the other kind alone")
+    func removedImageIsFetchedAgain() async throws {
+        CountingProtocol.reset()
+        let directory = temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let cache = makeCache(directory: directory)
+        let old = URL(string: "https://i.discogs.com/2-old.jpeg")!
+        let new = URL(string: "https://i.discogs.com/2-new.jpeg")!
+        let thumb = URL(string: "https://i.discogs.com/2-thumb.jpeg")!
+        _ = try await cache.localURL(releaseID: 2, kind: .cover, remoteURL: old)
+        _ = try await cache.localURL(releaseID: 2, kind: .thumb, remoteURL: thumb)
+
+        await cache.remove(ImageCache.Slot(releaseID: 2, kind: .cover))
+        #expect(await cache.isCached(releaseID: 2, kind: .cover) == false)
+        #expect(await cache.isCached(releaseID: 2, kind: .thumb))
+
+        _ = try await cache.localURL(releaseID: 2, kind: .cover, remoteURL: new)
+        #expect(CountingProtocol.count(for: new.absoluteString) == 1)
+    }
+
     @Test("Concurrent requests for one image collapse into a single download")
     func coalescesConcurrentRequests() async throws {
         CountingProtocol.reset()

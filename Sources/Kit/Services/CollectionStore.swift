@@ -48,16 +48,22 @@ actor CollectionStore {
     }
 
     /// Inserts new copies and refreshes existing ones in place.
-    func upsert(_ items: [CollectionItem]) throws {
+    ///
+    /// - Returns: the cached art whose Discogs URL changed, so the caller can drop those files.
+    @discardableResult
+    func upsert(_ items: [CollectionItem]) throws -> Set<ImageCache.Slot> {
         let existing = try existingItemsByInstanceID()
+        var staleArtwork = Set<ImageCache.Slot>()
         for item in items {
             if let cached = existing[item.instanceID] {
+                staleArtwork.formUnion(cached.changedArtwork(comparedTo: item))
                 cached.update(from: item)
             } else {
                 modelContext.insert(CachedCollectionItem(from: item))
             }
         }
         try modelContext.save()
+        return staleArtwork
     }
 
     /// Drops every cached copy whose `instanceID` is absent from `instanceIDs`.

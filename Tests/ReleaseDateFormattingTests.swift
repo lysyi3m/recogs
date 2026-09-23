@@ -20,7 +20,8 @@ struct ReleaseDateFormattingTests {
             styles: [],
             tracks: [],
             coverURL: nil,
-            discogsURL: nil
+            discogsURL: nil,
+            fetchedAt: .now
         )
     }
 

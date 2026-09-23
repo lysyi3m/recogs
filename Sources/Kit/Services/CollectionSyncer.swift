@@ -73,7 +73,11 @@ actor CollectionSyncer {
 
         for try await page in client.collectionPages(user: identity.username) {
             try Task.checkCancellation()
-            try await store.upsert(page.releases)
+            // Art whose URL changed is dropped here and downloaded again by the warmer below, so
+            // covers follow Discogs on the same schedule as the rest of the collection.
+            for slot in try await store.upsert(page.releases) {
+                await imageCache.remove(slot)
+            }
 
             for item in page.releases {
                 seenInstanceIDs.insert(item.instanceID)
