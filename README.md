@@ -104,6 +104,15 @@ v1 is the flows above. Deliberately out of scope for now: barcode scanning,
 a zoomable infinite canvas, folder-aware UI, an offline edit queue, wantlist,
 marketplace prices, and stats.
 
+## Privacy
+
+Recogs collects no data and talks only to Discogs — see [PRIVACY.md](PRIVACY.md).
+
+## Discogs
+
+This application uses Discogs’ API but is not affiliated with, sponsored or endorsed by Discogs.
+‘Discogs’ is a trademark of Zink Media, LLC.
+
 ## License
 
 The code is MIT — see [LICENSE](LICENSE). The app's name and icon are reserved; see

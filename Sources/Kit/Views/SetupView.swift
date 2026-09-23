@@ -142,6 +142,16 @@ struct SetupView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding(.top, 8)
+
+            VStack(spacing: 6) {
+                Text(DiscogsNotice.affiliation)
+                Link("Privacy Policy", destination: AppLinks.privacyPolicy)
+            }
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.top, 12)
         }
     }
 

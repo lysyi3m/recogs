@@ -56,6 +56,11 @@ contradicts a rule here, the repo-specific rule wins — and say so when you not
   budget, so images are bounded by their own concurrency cap instead.
 - A copy you own is an **instance** (`instance_id`) of a `release_id` in a `folder_id`. The
   remove flow keys off `instance_id`, not `release_id`.
+- **The API Terms of Use require two notices.** The affiliation notice
+  (`DiscogsNotice.affiliation`) appears in Settings ▸ About, on the setup screen and in the
+  README. `DiscogsCredit` ("Data provided by Discogs.") sits next to every view of Discogs data
+  and links to the discogs.com page that holds it. A new screen of Discogs data needs its own
+  credit.
 
 ## Terminology
 
@@ -91,6 +96,9 @@ commit `.env`.
   it draws a pre-masked icon on Apple's 824-on-1024 grid as-is, so both render correctly. Before
   changing icon assets, render `NSWorkspace.shared.icon(forFile:)` for the built app and compare.
   `assets/icon.png` for the README is masked by hand — GitHub shows a PNG as-is.
+- **`PRIVACY.md` has a fixed URL.** App Store Connect, Help ▸ Privacy Policy, Settings ▸ About
+  and the setup screen point at `github.com/lysyi3m/recogs/blob/master/PRIVACY.md`
+  (`AppLinks.privacyPolicy`). Never move or rename it, and keep its claims true of the code.
 - **Privacy manifest keys are unvalidated.** `plutil` and Xcode accept a wrong key silently.
   Check `Config/PrivacyInfo.xcprivacy` against Apple's documentation, not against a clean build.
 - `LD_RUNPATH_SEARCH_PATHS` carries a macOS-specific variant in `project.yml`. XcodeGen emits

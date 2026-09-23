@@ -6,6 +6,7 @@ import SwiftUI
 /// The sort lives in the `@Query` descriptor, so changing it re-fetches instead of re-sorting an
 /// array, and both layouts stay lazy.
 struct CollectionView: View {
+    @Environment(AppServices.self) private var services
     @Query private var items: [CachedCollectionItem]
 
     private let layout: CollectionLayout
@@ -80,38 +81,42 @@ struct CollectionView: View {
     private var list: some View {
         ScrollViewReader { proxy in
             List {
-                ForEach(items) { item in
-                    Button { onSelect(item) } label: {
-                        ReleaseRow(
-                            releaseID: item.releaseID,
-                            remoteURL: item.artwork.url,
-                            kind: item.artwork.kind,
-                            title: item.title,
-                            artist: item.artistName,
-                            // What the record page puts under the title. Year alone in a
-                            // right-hand column is a lot of width for four digits.
-                            details: ReleaseRow.details([
-                                item.year.map(String.init),
-                                item.formatSummary,
-                            ])
-                        )
+                Section {
+                    ForEach(items) { item in
+                        Button { onSelect(item) } label: {
+                            ReleaseRow(
+                                releaseID: item.releaseID,
+                                remoteURL: item.artwork.url,
+                                kind: item.artwork.kind,
+                                title: item.title,
+                                artist: item.artistName,
+                                // What the record page puts under the title. Year alone in a
+                                // right-hand column is a lot of width for four digits.
+                                details: ReleaseRow.details([
+                                    item.year.map(String.init),
+                                    item.formatSummary,
+                                ])
+                            )
+                        }
+                            .buttonStyle(.plain)
+                            .contextMenu {
+                                Button("Open") { onSelect(item) }
+                                Divider()
+                                Button("Remove from Collection…", systemImage: "trash", role: .destructive) {
+                                    onRequestRemove(item)
+                                }
+                            }
+                            #if os(iOS)
+                            .swipeActions(edge: .trailing) {
+                                Button("Remove", systemImage: "trash", role: .destructive) {
+                                    onRequestRemove(item)
+                                }
+                            }
+                            #endif
+                            .rowHoverHighlight(id: item.id, hovered: $hoveredID)
                     }
-                        .buttonStyle(.plain)
-                        .contextMenu {
-                            Button("Open") { onSelect(item) }
-                            Divider()
-                            Button("Remove from Collection…", systemImage: "trash", role: .destructive) {
-                                onRequestRemove(item)
-                            }
-                        }
-                        #if os(iOS)
-                        .swipeActions(edge: .trailing) {
-                            Button("Remove", systemImage: "trash", role: .destructive) {
-                                onRequestRemove(item)
-                            }
-                        }
-                        #endif
-                        .rowHoverHighlight(id: item.id, hovered: $hoveredID)
+                } footer: {
+                    credit
                 }
             }
             #if os(macOS)
@@ -152,7 +157,12 @@ struct CollectionView: View {
                 }
             }
             .padding(spacing)
+            credit.padding(.bottom, spacing)
         }
+    }
+
+    private var credit: some View {
+        DiscogsCredit(destination: DiscogsNotice.collectionURL(username: services.accountUsername))
     }
 
     #if os(iOS)

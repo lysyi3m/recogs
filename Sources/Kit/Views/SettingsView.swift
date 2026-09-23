@@ -1,7 +1,7 @@
 import DiscogsKit
 import SwiftUI
 
-/// App settings. Two concerns: what is cached, and which account it came from.
+/// App settings: what is cached, which account it came from, and the notices about both.
 ///
 /// macOS presents these as tabs in the Settings window; iOS as sections in a sheet.
 public struct SettingsView: View {
@@ -19,8 +19,10 @@ public struct SettingsView: View {
                 .tabItem { Label("Collection", systemImage: "square.grid.2x2") }
             AccountSettingsView(onSignedOut: onSignedOut)
                 .tabItem { Label("Account", systemImage: "person.crop.circle") }
+            AboutSettingsView()
+                .tabItem { Label("About", systemImage: "info.circle") }
         }
-        // Tall enough for the Collection tab, which is the longer of the two; a short window
+        // Tall enough for the Collection tab, which is the longest of the three; a short window
         // hides its first section behind the tab bar.
         .frame(width: 520, height: 420)
         #else
@@ -28,6 +30,7 @@ public struct SettingsView: View {
             Form {
                 CollectionSettingsView()
                 AccountSettingsView(onSignedOut: onSignedOut)
+                AboutSettingsView()
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -236,6 +239,30 @@ struct AccountSettingsView: View {
             onSignedOut()
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+}
+
+// MARK: - About
+
+/// The Discogs affiliation notice and the privacy policy.
+struct AboutSettingsView: View {
+    var body: some View {
+        #if os(macOS)
+        Form { sections }.formStyle(.grouped)
+        #else
+        sections
+        #endif
+    }
+
+    @ViewBuilder
+    private var sections: some View {
+        Section("About") {
+            Text(DiscogsNotice.affiliation)
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Link("Privacy Policy", destination: AppLinks.privacyPolicy)
         }
     }
 }
