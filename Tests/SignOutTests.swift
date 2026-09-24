@@ -64,7 +64,7 @@ struct SignOutTests {
         try await services.signOut()
 
         // The sync is shielded from its caller's cancellation, so it outlives the request that
-        // started it. Sign-out has to stop it, or it writes the old account back in behind us.
+        // started it. Sign-out has to stop it, or it writes the old account back into the store.
         _ = await sync.result
         #expect(try await services.store.itemCount() == 0, "no record of the old account may survive")
         #expect(services.hasToken == false)

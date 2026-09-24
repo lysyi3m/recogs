@@ -12,12 +12,14 @@ typealias PlatformImage = NSImage
 
 /// On-disk cache for cover art, keyed by release id.
 ///
-/// Thumbs and full-resolution covers are stored separately so the grid can be usable long before
-/// any full-res image is fetched. Each file records the URL it was downloaded from, and a request
-/// for a different URL downloads again — so the art follows Discogs, and an app that quits halfway
-/// through a sync cannot strand an old image. A file with no recorded source, cached before files
-/// recorded one, is downloaded again once. Until a download succeeds the file on disk is still
-/// served, so the collection stays browsable offline. There is no size-based eviction.
+/// Thumbs and covers are stored in separate slots. The cover is Discogs' 600px `cover_image`; the
+/// thumb is the fallback for a release with no cover. Each file records the URL it was downloaded
+/// from, and a request for a different URL downloads again — so the art follows Discogs, and an
+/// app that quits halfway through a sync cannot strand an old image.
+///
+/// A file with no recorded source, cached before files recorded one, is downloaded again once.
+/// Until a download succeeds the file on disk is still served, so the collection stays browsable
+/// offline. There is no size-based eviction.
 ///
 /// Image requests do not pass through `RateLimiter`. Measured against the live API, `i.discogs.com`
 /// returns no `X-Discogs-Ratelimit*` headers and does not move the counter, so the CDN has its own
@@ -26,7 +28,7 @@ actor ImageCache {
     enum Kind: String, Sendable {
         /// ~150px, embedded in every collection item.
         case thumb
-        /// ~500px+, fetched lazily when a record detail opens.
+        /// `cover_image`, 600px. The grid and the record page both draw it.
         case cover
     }
 
@@ -48,7 +50,8 @@ actor ImageCache {
 
     private var activeDownloads = 0
     private var waiters: [UUID: CheckedContinuation<Void, any Error>] = [:]
-    /// Coalesces concurrent requests for the same file so a cover is fetched once, not once per view.
+    /// Coalesces concurrent requests for the same file so a cover is fetched once, not once per
+    /// view.
     /// Keyed by destination; the source URL is kept so a request for a newer image never joins the
     /// download of an older one.
     private var inFlight: [URL: (source: URL, task: Task<URL, any Error>)] = [:]
@@ -215,8 +218,8 @@ actor ImageCache {
     func diskUsage() -> Int { statistics().byteCount }
 
     func removeAll() async throws {
-        // Downloads first: otherwise one still in flight writes its file into the directory we
-        // just deleted, and the cache the user asked to clear is not empty.
+        // Downloads first: otherwise one still in flight writes its file into the deleted
+        // directory, and the cache the user asked to clear is not empty.
         await cancelInFlightDownloads()
         guard FileManager.default.fileExists(atPath: directory.path) else { return }
         try FileManager.default.removeItem(at: directory)

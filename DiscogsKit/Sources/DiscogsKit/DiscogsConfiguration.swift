@@ -3,8 +3,8 @@ import Foundation
 /// Static configuration for a `DiscogsClient`.
 ///
 /// The Discogs API requires a `User-Agent` that uniquely identifies the client and carries a
-/// contact. Generic agents are throttled harder, so `contact` has no sensible library default and
-/// callers are expected to set it for the shipping app.
+/// contact. Generic agents are throttled harder. `userAgent(appVersion:contact:)` builds a
+/// conforming value from `contact`.
 public struct DiscogsConfiguration: Sendable {
     /// API root. Discogs API v2.
     public var baseURL: URL
@@ -15,7 +15,7 @@ public struct DiscogsConfiguration: Sendable {
     /// Page size for paginated endpoints. Discogs caps this at 100.
     public var perPage: Int
 
-    /// Requests held back from the advertised rate limit, so a burst never lands exactly on the cap.
+    /// Requests held back from the advertised rate limit, so a burst never lands on the cap.
     public var rateLimitSafetyMargin: Int
 
     /// Attempts made after the first failure for retryable responses (429 and 5xx).
@@ -51,8 +51,8 @@ public struct DiscogsConfiguration: Sendable {
 
 /// Well-known Discogs folder identifiers.
 public enum DiscogsFolder {
-    /// Pseudo-folder spanning every item in the collection. Read-only: adds must target a real folder.
+    /// Pseudo-folder spanning every item in the collection. Read-only: an add needs a real folder.
     public static let all = 0
-    /// The default real folder. v1 adds land here.
+    /// The default real folder, and the target of every add.
     public static let uncategorized = 1
 }

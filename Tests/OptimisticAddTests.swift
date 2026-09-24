@@ -108,9 +108,9 @@ struct OptimisticAddTests {
         let item = try #require(try await store.item(instanceID: -5))
         #expect(item.artistName == "Talking Heads")
         // The search result already carried `cover_image`, and that is what the grid and the
-        // record page both draw. Replacing it with the release's full-size original would make an
-        // added record cache a different image than the same record arriving from a sync — and
-        // they share one cache slot, so whichever loaded first would win permanently.
+        // record page both draw. The release's full-size original would give an added record a
+        // different URL than the same record arriving from a sync. They share one cache slot, so
+        // each would read the other as a changed image and download it again.
         #expect(item.coverURL == "https://i.discogs.com/cover.jpeg")
     }
 

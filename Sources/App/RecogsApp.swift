@@ -4,11 +4,12 @@ import SwiftUI
 #if os(macOS)
 import AppKit
 
-/// Trims menu items SwiftUI adds that this app has no use for.
+/// Refreshes the runtime app icon, and removes File ▸ New Window if SwiftUI adds one.
 ///
-/// A single `Window` scene still contributes File ▸ New Window, which here only re-focuses the
-/// window that is already open. No command group replaces it, so it is removed from the menu
-/// directly, along with the separator it leaves behind.
+/// With a single `Window` scene, New Window would only re-focus the window that is already open.
+/// The item is matched on ⌘N rather than its localized title, and removed with the separator it
+/// leaves behind. Measured on macOS 26.7, the scene's `CommandGroup(replacing: .newItem)` already
+/// drops it, so this is a fallback.
 final class MenuTrimmingAppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Keep AppKit's runtime icon in sync with the compiled asset catalog. During development,
@@ -64,8 +65,8 @@ struct RecogsApp: App {
 
     var body: some Scene {
         #if os(macOS)
-        // One collection, one window. `Window` also drops File ▸ New Window and the window tab
-        // bar that `WindowGroup` brings with it, neither of which means anything here.
+        // One collection, one window. `Window` drops the window tab bar that `WindowGroup` brings
+        // with it, and the `.newItem` group below replaces File ▸ New Window with Add Record….
         Window("Recogs", id: "collection") {
             rootView
                 // Below this the status bar runs out of room and the record count collides with

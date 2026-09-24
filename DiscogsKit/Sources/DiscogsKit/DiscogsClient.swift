@@ -83,9 +83,10 @@ public struct DiscogsClient: Sendable {
     ///
     /// - Important: `AsyncThrowingStream` answers cancellation by finishing, not by throwing. A
     ///   `for try await` over this stream therefore ends normally when the consuming task is
-    ///   cancelled, having yielded however many pages it managed — which is indistinguishable from
-    ///   a collection that really is that size. Every consumer must call `Task.checkCancellation()`
-    ///   **after** the loop before treating the result as the whole collection.
+    ///   cancelled, having yielded however many pages it managed — which is indistinguishable
+    ///   from a collection that really is that size. Every consumer must call
+    ///   `Task.checkCancellation()` **after** the loop before treating the result as the whole
+    ///   collection.
     public func collectionPages(
         user: String,
         folderID: Int = DiscogsFolder.all,
@@ -176,7 +177,7 @@ public struct DiscogsClient: Sendable {
         )
     }
 
-    /// `DELETE /users/{user}/collection/folders/{folder_id}/releases/{release_id}/instances/{instance_id}`
+    /// `DELETE …/collection/folders/{folder_id}/releases/{release_id}/instances/{instance_id}`
     ///
     /// Removes one copy. Keyed by `instanceID`, so owning two copies of the same release stays
     /// unambiguous.
@@ -316,8 +317,8 @@ public struct DiscogsClient: Sendable {
         component.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? component
     }
 
-    /// Decoder configured for Discogs payloads. Public so fixtures and previews can build models
-    /// from recorded JSON without duplicating the date strategy.
+    /// Decoder configured for Discogs payloads. Public so the app's tests can build models from
+    /// recorded JSON without duplicating the date strategy.
     public static func makeDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         // Discogs sends ISO-8601 with a UTC offset, sometimes with fractional seconds.

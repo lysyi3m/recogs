@@ -87,12 +87,12 @@ public actor RateLimiter {
             return .wait(until: oldest.addingTimeInterval(Self.window))
         }
 
-        // The server said we were inside the safety margin. Honour that only while the reading
+        // The server reported a count inside the safety margin. Honour it only while the reading
         // still describes the current window.
         if let remaining, remaining <= safetyMargin,
            let observedAt = remainingObservedAt,
            now.timeIntervalSince(observedAt) < Self.window {
-            // Wait for one of our own sends to age out, or failing that for the reading itself to
+            // Wait for the oldest local send to age out, or failing that for the reading itself to
             // expire, after which a request goes out and refreshes it.
             let wake = sendTimestamps.first?.addingTimeInterval(Self.window)
                 ?? observedAt.addingTimeInterval(Self.window)
@@ -109,7 +109,8 @@ public actor RateLimiter {
         if let current = remaining { remaining = max(current - 1, 0) }
     }
 
-    /// Absorbs the rate-limit headers from a response. Clears any active 429 block.
+    /// Absorbs the rate-limit headers from a response. Any response other than a 429 clears an
+    /// active 429 block.
     public func update(from response: HTTPURLResponse) {
         if let value = response.value(forHTTPHeaderField: "X-Discogs-Ratelimit"),
            let parsed = Int(value.trimmingCharacters(in: .whitespaces)), parsed > 0 {
@@ -135,7 +136,7 @@ public actor RateLimiter {
         let delay = backoffDelay(retryAfter: retryAfter, attempt: attempt)
         let until = Date().addingTimeInterval(delay)
         if (blockedUntil ?? .distantPast) < until { blockedUntil = until }
-        // A 429 means the window is already full; drop local history so it is rebuilt after the block.
+        // A 429 means the window is already full. Drop local history so it rebuilds after the block.
         sendTimestamps.removeAll()
         try await sleep(until: until)
         // The backoff has passed, so the counts that came with the 429 describe a window that is

@@ -2,8 +2,8 @@ import DiscogsKit
 import Foundation
 import SwiftData
 
-/// A Discogs collection folder. v1's UI is flat, but the folders are cached so folder-awareness is
-/// a fast follow rather than a new sync path.
+/// A Discogs collection folder. The UI shows one flat collection. Folders are cached so a folder
+/// view needs no new sync path.
 @Model
 final class CachedFolder {
     @Attribute(.unique) var id: Int

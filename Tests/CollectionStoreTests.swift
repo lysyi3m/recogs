@@ -52,8 +52,8 @@ struct CollectionStoreTests {
             try makeItem(instanceID: 3, title: "Later", year: 2001),
         ])
 
-        // A blank year column at the top of the list reads like the sort failed, so the yearless
-        // record belongs at the end whichever way the years run.
+        // A record with no year at the top of a year sort reads like the sort failed, so the
+        // yearless record belongs at the end whichever way the years run.
         for direction in SortDirection.allCases {
             let titles = try await store.items(sortedBy: .year, direction: direction).map(\.title)
             #expect(titles.last == "Undated", "yearless record must sort last when \(direction.rawValue)")

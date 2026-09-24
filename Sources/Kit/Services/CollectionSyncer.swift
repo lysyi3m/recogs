@@ -1,8 +1,8 @@
 import DiscogsKit
 import Foundation
 
-/// Drives a full refresh: Discogs pages in, the SwiftData cache is reconciled against it, then
-/// thumbs are warmed so the grid fills in.
+/// Drives a full refresh: Discogs pages in, and the SwiftData cache is reconciled against it. The
+/// artwork to prefetch goes back to the caller in `Summary.artwork`.
 ///
 /// Reconciliation is by `instanceID`, and anything the server no longer reports is dropped, so a
 /// copy removed on discogs.com disappears here on the next refresh.

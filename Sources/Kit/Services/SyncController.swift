@@ -45,6 +45,7 @@ final class SyncController {
     /// Sleeps until the last sync falls due, syncs, and retries every `Freshness.retryInterval`
     /// while that fails. Offline, the cache stays on screen with its age, and catches up once
     /// Discogs is reachable.
+    ///
     /// The sleep runs on the continuous clock, so a device that slept through the deadline syncs
     /// as soon as it wakes.
     func keepFresh() async {
@@ -160,8 +161,8 @@ final class SyncController {
         activity = "Clearing cache…"
         try await services.resetCache()
         activity = "Downloading collection…"
-        // A failure here leaves an empty cache, so it is reported even when the cause is simply
-        // being offline.
+        // A failure here leaves an empty cache, so it is reported even when the cause is being
+        // offline.
         _ = await runSync()
         // On the collection screen being offline is a status line, not a failure: the cache is
         // intact and still browsable.

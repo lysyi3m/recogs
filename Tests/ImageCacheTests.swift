@@ -64,8 +64,6 @@ struct ImageCacheTests {
                 "the old location is left clean")
     }
 
-    /// Serves a 1x1 PNG and counts how many times each URL is requested, so "never re-fetch" is a
-    /// measurable claim rather than an assumption.
     /// Serves a valid PNG, slowly, so downloads are still in flight when a test interrupts them.
     final class SlowProtocol: URLProtocol, @unchecked Sendable {
         nonisolated(unsafe) private static var cancelled = false
@@ -94,6 +92,8 @@ struct ImageCacheTests {
         }
     }
 
+    /// Serves a 1x1 PNG and counts how many times each URL is requested, so "downloaded once" is a
+    /// measurable claim rather than an assumption.
     final class CountingProtocol: URLProtocol, @unchecked Sendable {
         nonisolated(unsafe) static var requestCounts: [String: Int] = [:]
         nonisolated(unsafe) static var statusCode = 200

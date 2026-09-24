@@ -62,7 +62,7 @@ final class ReleaseDetailLoader {
             let release = try await client.release(id: releaseID)
             state = .loaded(try await services.store.upsertReleaseDetail(release))
         } catch is CancellationError {
-            // The detail was dismissed before the fetch finished.
+            // The record page was dismissed before the fetch finished.
         } catch {
             state = cached.map(State.loaded) ?? .failed(error.localizedDescription)
         }
